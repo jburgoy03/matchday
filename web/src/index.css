@@ -177,3 +177,17 @@ h2 { font-size: 1rem; margin: 1.5rem 0 0.5rem; }
 .jersey { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
 .pos { font-size: 0.75rem; }
 .marks { font-size: 0.8rem; }
+
+.home-link {
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.home-link:hover { color: var(--accent); }
+
+@media (max-width: 480px) {
+  .site-header { gap: 1rem; }
+  .home-link { font-size: 0.75rem; }
+}

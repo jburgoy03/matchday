@@ -14,6 +14,9 @@ export default function App() {
           </NavLink>
           <NavLink to="/table">Table</NavLink>
         </nav>
+                <a className="home-link" href="https://deanburgoyne.dev">
+          deanburgoyne.dev <span aria-hidden="true">↗</span>
+        </a>
       </header>
       <main>
         <Routes>
