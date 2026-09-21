@@ -40,9 +40,9 @@ export default function MatchesPage() {
                 <Link to={`/match/${m.id}`} className="match-row">
                   <span className={`status ${isLive(m.status) ? 'live' : ''}`}>{statusLabel(m)}</span>
                   <span className="home"><TeamBadge team={m.home} short /></span>
-                  <span className="score">
-                    {m.homeScore === null ? 'v' : `${m.homeScore} – ${m.awayScore}`}
-                  </span>
+                  <span className="hs">{m.homeScore}</span>
+                  <span className="sep">{m.homeScore === null ? 'v' : '–'}</span>
+                  <span className="as">{m.awayScore}</span>
                   <span className="away"><TeamBadge team={m.away} short /></span>
                 </Link>
               </li>

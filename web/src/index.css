@@ -99,16 +99,41 @@ h1 { font-size: 1.25rem; margin: 0.5rem 0 1rem; }
 .match-list li + li { border-top: 1px solid var(--border); }
 .match-row {
   display: grid;
-  grid-template-columns: 4.5rem 1fr 4.5rem 1fr;
+  grid-template-columns: 4.5rem 1fr 1.75rem 1rem 1.75rem 1fr;
+  grid-template-areas: "status home hs sep as away";
   align-items: center;
-  gap: 0.5rem;
+  gap: 0 0.5rem;
   padding: 0.65rem 0.75rem;
   text-decoration: none;
 }
 .match-row:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
-.match-row .home { justify-self: end; }
+.match-row .status { grid-area: status; }
+.match-row .home { grid-area: home; justify-self: end; min-width: 0; }
 .match-row .home .team { flex-direction: row-reverse; }
-.match-row .score { text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+.match-row .away { grid-area: away; min-width: 0; }
+.match-row .hs { grid-area: hs; text-align: right; }
+.match-row .as { grid-area: as; text-align: left; }
+.match-row .sep { grid-area: sep; text-align: center; color: var(--muted); }
+.match-row .hs, .match-row .as { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Long names truncate with "…" instead of overflowing */
+.team { min-width: 0; max-width: 100%; }
+.team > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Phones: stack home over away, each score beside its team */
+@media (max-width: 560px) {
+  .match-row {
+    grid-template-columns: 3.25rem 1fr 1.5rem;
+    grid-template-areas:
+      "status home hs"
+      "status away as";
+    row-gap: 0.35rem;
+  }
+  .match-row .sep { display: none; }
+  .match-row .home { justify-self: start; }
+  .match-row .home .team { flex-direction: row; }
+  .match-row .hs, .match-row .as { text-align: right; }
+}
 .status { font-size: 0.8rem; color: var(--muted); }
 .status.live { color: var(--live); font-weight: 700; }
 
