@@ -1,4 +1,10 @@
+using Matchday.Data;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDbContext<MatchdayDbContext>(o =>
+    o.UseNpgsql(builder.Configuration.GetConnectionString("Matchday")));
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
