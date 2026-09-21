@@ -1,5 +1,6 @@
 import { BrowserRouter, NavLink, Route, Routes } from 'react-router'
 import MatchesPage from './pages/MatchesPage'
+import MatchPage from './pages/MatchPage'
 import TablePage from './pages/TablePage'
 
 export default function App() {
@@ -18,6 +19,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<MatchesPage />} />
           <Route path="/table" element={<TablePage />} />
+          <Route path="/match/:id" element={<MatchPage />} />
         </Routes>
       </main>
     </BrowserRouter>
