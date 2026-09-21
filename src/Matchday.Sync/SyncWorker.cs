@@ -20,6 +20,9 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
     private DateTimeOffset _lastStandings = DateTimeOffset.MinValue;
     private readonly Dictionary<string, DateTimeOffset> _lastDetail = new();
 
+    private const int FixtureDaysBack = 3;
+    private const int FixtureDaysAhead = 21; // covers international breaks and blank weekends
+
     private sealed record Candidate(
         string ProviderId,
         DateTimeOffset Kickoff,
@@ -55,15 +58,15 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
         var anyFinished = false;
 
         // 1. Fixture window. Overlapping days cover ESPN's date buckets not matching UTC.
-        if (now - _lastFixtures >= FixtureInterval)
+                if (now - _lastFixtures >= FixtureInterval)
         {
-            for (var d = today.AddDays(-3); d <= today.AddDays(10); d = d.AddDays(1))
+            for (var d = today.AddDays(-FixtureDaysBack); d <= today.AddDays(FixtureDaysAhead); d = d.AddDays(1))
             {
                 var day = d;
                 anyFinished |= await WithSync(s => s.SyncDayAsync(day, ct));
             }
             _lastFixtures = now;
-            log.LogInformation("Fixture window synced ({From} to {To})", today.AddDays(-3), today.AddDays(10));
+            log.LogInformation("Fixture window synced ({From} to {To})", today.AddDays(-FixtureDaysBack), today.AddDays(FixtureDaysAhead));
         }
 
         // 2. Match detail for anything live, about to start, or recently finished.
