@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:17
+    container_name: matchday-db-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: matchday
+      POSTGRES_USER: matchday
+      POSTGRES_PASSWORD: ${MATCHDAY_DB_PASSWORD:?set MATCHDAY_DB_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - matchday-pgdata-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U matchday -d matchday"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  matchday-pgdata-dev:

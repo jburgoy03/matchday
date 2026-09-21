@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Matchday.Core\Matchday.Core.csproj" />
+    <ProjectReference Include="..\Matchday.Data\Matchday.Data.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

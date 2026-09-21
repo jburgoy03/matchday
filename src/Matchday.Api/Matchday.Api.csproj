@@ -8,12 +8,17 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Matchday.Core\Matchday.Core.csproj" />
     <ProjectReference Include="..\Matchday.Providers.Espn\Matchday.Providers.Espn.csproj" />
     <ProjectReference Include="..\Matchday.Sync\Matchday.Sync.csproj" />
+    <ProjectReference Include="..\Matchday.Data\Matchday.Data.csproj" />
   </ItemGroup>
 
 </Project>
