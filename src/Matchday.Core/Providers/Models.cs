@@ -1,0 +1,68 @@
+namespace Matchday.Core.Providers;
+
+public enum MatchStatus { Scheduled, Live, HalfTime, FullTime, Postponed, Cancelled, Unknown }
+
+public enum MatchEventType { Goal, PenaltyGoal, OwnGoal, YellowCard, RedCard, Substitution, Other }
+
+public sealed record TeamRef(
+    string ProviderId,
+    string Name,
+    string ShortName,
+    string Abbreviation,
+    string? LogoUrl);
+
+public sealed record PlayerRef(
+    string ProviderId,
+    string Name,
+    string? Jersey,
+    string? Position);
+
+public sealed record MatchSummary(
+    string ProviderId,
+    DateTimeOffset KickoffUtc,
+    MatchStatus Status,
+    string? ClockDisplay,
+    TeamRef Home,
+    TeamRef Away,
+    int? HomeScore,
+    int? AwayScore,
+    string? Venue);
+
+public sealed record LineupPlayer(
+    PlayerRef Player,
+    bool Starter,
+    int? FormationPlace);
+
+public sealed record TeamLineup(
+    string TeamProviderId,
+    string? Formation,
+    IReadOnlyList<LineupPlayer> Players);
+
+/// <summary>
+/// Primary = scorer / carded player / player coming on.
+/// Secondary = assister / player going off.
+/// </summary>
+public sealed record MatchEvent(
+    MatchEventType Type,
+    int? Minute,
+    string ClockDisplay,
+    string? TeamProviderId,
+    PlayerRef? Primary,
+    PlayerRef? Secondary,
+    string? Detail);
+
+public sealed record MatchDetail(
+    MatchSummary Summary,
+    IReadOnlyList<TeamLineup> Lineups,
+    IReadOnlyList<MatchEvent> Events);
+
+public sealed record StandingRow(
+    int Position,
+    TeamRef Team,
+    int Played,
+    int Won,
+    int Drawn,
+    int Lost,
+    int GoalsFor,
+    int GoalsAgainst,
+    int Points);

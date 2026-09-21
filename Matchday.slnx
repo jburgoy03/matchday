@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Matchday.Api/Matchday.Api.csproj" />
+    <Project Path="src/Matchday.Core/Matchday.Core.csproj" />
+    <Project Path="src/Matchday.Providers.Espn/Matchday.Providers.Espn.csproj" />
+    <Project Path="src/Matchday.Sync/Matchday.Sync.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Matchday.Tests/Matchday.Tests.csproj" />
+  </Folder>
+</Solution>
