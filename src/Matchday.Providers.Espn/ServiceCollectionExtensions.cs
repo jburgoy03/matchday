@@ -12,7 +12,7 @@ public static class ServiceCollectionExtensions
             {
                 c.BaseAddress = new Uri(EspnFootballProvider.BaseUrl);
                 c.Timeout = TimeSpan.FromSeconds(20);
-                c.DefaultRequestHeaders.UserAgent.ParseAdd("Matchday/0.1 (personal project)");
+                c.DefaultRequestHeaders.UserAgent.ParseAdd("curl/8.5.0"); // ESPN's CDN only lets through known client UAs
             })
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
             {
