@@ -1,10 +1,17 @@
 using Matchday.Data;
 using Microsoft.EntityFrameworkCore;
+using Matchday.Providers.Espn;
+using Matchday.Sync;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<MatchdayDbContext>(o =>
     o.UseNpgsql(builder.Configuration.GetConnectionString("Matchday")));
+
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddEspnFootballProvider();
+builder.Services.AddScoped<MatchSyncService>();
+builder.Services.AddHostedService<SyncWorker>();
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
