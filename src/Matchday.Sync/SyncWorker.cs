@@ -74,15 +74,19 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
             var from = now.AddHours(-6);
             var to = now.AddMinutes(90);
             candidates = await db.Matches.AsNoTracking()
-                .Where(m => m.KickoffUtc >= from && m.KickoffUtc <= to)
+                .Where(m => (m.KickoffUtc >= from && m.KickoffUtc <= to)
+                         || (m.Status == MatchStatus.FullTime && m.DetailSyncedAt == null))
+                .OrderByDescending(m => m.KickoffUtc)
                 .Select(m => new Candidate(m.ProviderId, m.KickoffUtc, m.Status, m.Lineup.Any(), m.DetailSyncedAt))
                 .ToListAsync(ct);
         }
 
+                var backfills = 0;
         foreach (var c in candidates)
         {
             if (Due(c, now) is not { } interval) continue;
             if (_lastDetail.TryGetValue(c.ProviderId, out var last) && now - last < interval) continue;
+            if (c is { Status: MatchStatus.FullTime, DetailSyncedAt: null } && ++backfills > 5) continue; // throttle backfill
 
             anyFinished |= await WithSync(s => s.SyncMatchDetailAsync(c.ProviderId, ct));
             _lastDetail[c.ProviderId] = now;
