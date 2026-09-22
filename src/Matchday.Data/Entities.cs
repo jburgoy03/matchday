@@ -81,6 +81,22 @@ public class MatchIncident
     public string? Detail { get; set; }
 }
 
+/// <summary>One player in a club's current squad, from the provider's roster. Replaced wholesale on each squad sync.</summary>
+public class SquadMember
+{
+    public int Id { get; set; }
+    public int TeamId { get; set; }
+    public int PlayerId { get; set; }
+    public Player Player { get; set; } = null!;
+    public string? Jersey { get; set; }
+    /// <summary>G, D, M or F.</summary>
+    public string? Position { get; set; }
+    public int? Age { get; set; }
+    public string? Nationality { get; set; }
+    public string? FlagUrl { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 /// <summary>Small key/value store for the worker's progress (e.g. how far the season backfill has got).</summary>
 public class SyncState
 {

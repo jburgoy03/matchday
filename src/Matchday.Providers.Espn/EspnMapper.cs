@@ -47,6 +47,22 @@ public static partial class EspnMapper
             .OrderBy(r => r.Position)
             .ToList();
 
+    /// <summary>teams/{id}/roster → the current squad. Players without an id are skipped.</summary>
+    public static IReadOnlyList<SquadPlayer> MapRoster(JsonElement root) =>
+        root.Arr("athletes")
+            .Select(a => new SquadPlayer(
+                new PlayerRef(
+                    a.Str("id") ?? "",
+                    a.Str("displayName") ?? "",
+                    a.Str("jersey"),
+                    a.Str("position", "abbreviation")),
+                a.Int("age"),
+                a.Str("citizenship"),
+                a.Str("flag", "href")))
+            .Where(p => p.Player.ProviderId != "")
+            .DistinctBy(p => p.Player.ProviderId)
+            .ToList();
+
     private static MatchSummary MapCompetition(string id, JsonElement comp, string? venue)
     {
         var competitors = comp.Arr("competitors").ToList();

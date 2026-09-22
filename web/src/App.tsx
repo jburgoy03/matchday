@@ -2,6 +2,7 @@ import { BrowserRouter, NavLink, Route, Routes } from 'react-router'
 import MatchesPage from './pages/MatchesPage'
 import MatchPage from './pages/MatchPage'
 import TablePage from './pages/TablePage'
+import TeamPage from './pages/TeamPage'
 
 export default function App() {
   return (
@@ -14,7 +15,7 @@ export default function App() {
           </NavLink>
           <NavLink to="/table">Table</NavLink>
         </nav>
-                <a className="home-link" href="https://deanburgoyne.dev">
+        <a className="home-link" href="https://deanburgoyne.dev">
           deanburgoyne.dev <span aria-hidden="true">↗</span>
         </a>
       </header>
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/" element={<MatchesPage />} />
           <Route path="/table" element={<TablePage />} />
           <Route path="/match/:id" element={<MatchPage />} />
+          <Route path="/team/:id" element={<TeamPage />} />
         </Routes>
       </main>
     </BrowserRouter>

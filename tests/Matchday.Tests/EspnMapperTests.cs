@@ -69,6 +69,22 @@ public class EspnMapperTests
     }
 
     [Fact]
+    public void Roster_maps_squad_with_positions_and_nationality()
+    {
+        var squad = EspnMapper.MapRoster(Load("roster-367.json"));
+
+        Assert.Equal(29, squad.Count);
+        Assert.All(squad, p => Assert.Contains(p.Player.Position, new[] { "G", "D", "M", "F" }));
+        Assert.Equal(squad.Count, squad.Select(p => p.Player.ProviderId).Distinct().Count());
+
+        var dubravka = Assert.Single(squad, p => p.Player.Name == "Martin Dúbravka");
+        Assert.Equal("39", dubravka.Player.Jersey);
+        Assert.Equal("G", dubravka.Player.Position);
+        Assert.Equal(37, dubravka.Age);
+        Assert.NotNull(dubravka.Nationality);
+    }
+
+    [Fact]
     public void Standings_maps_twenty_teams_in_order()
     {
         var rows = EspnMapper.MapStandings(Load("standings.json"));

@@ -1,3 +1,4 @@
+import { Link } from 'react-router'
 import { api } from '../api'
 import { useApi } from '../useApi'
 import { TeamBadge } from '../components/TeamBadge'
@@ -38,7 +39,9 @@ export default function TablePage() {
               <tr key={r.team.id} className={zone(r.position)}>
                 <td>{r.position}</td>
                 <td className="team-col">
-                  <TeamBadge team={r.team} />
+                  <Link to={`/team/${r.team.id}`} className="team-link">
+                    <TeamBadge team={r.team} />
+                  </Link>
                 </td>
                 <td>{r.played}</td>
                 <td>{r.won}</td>

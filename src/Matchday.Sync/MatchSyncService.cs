@@ -146,6 +146,50 @@ public sealed class MatchSyncService(
         await db.Standings.Where(s => !current.Contains(s.Team.ProviderId)).ExecuteDeleteAsync(ct);
     }
 
+    /// <summary>Replaces one club's squad with the provider's current roster. Returns the number of players stored.</summary>
+    public async Task<int> SyncSquadAsync(string teamProviderId, CancellationToken ct)
+    {
+        var team = await db.Teams.FirstOrDefaultAsync(t => t.ProviderId == teamProviderId, ct);
+        if (team is null) return 0;
+
+        var squad = await provider.GetSquadAsync(teamProviderId, ct);
+        if (squad.Count == 0)
+        {
+            // An empty or failed roster keeps the squad we have rather than wiping it.
+            log.LogWarning("Provider returned no squad for team {TeamId}", teamProviderId);
+            return 0;
+        }
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+        var players = new Dictionary<string, Player>();
+        foreach (var p in squad)
+            players[p.Player.ProviderId] = await UpsertPlayerAsync(p.Player, ct);
+        await db.SaveChangesAsync(ct); // assigns ids to new players
+
+        await db.SquadMembers.Where(s => s.TeamId == team.Id).ExecuteDeleteAsync(ct);
+
+        var now = clock.GetUtcNow();
+        foreach (var p in squad)
+        {
+            db.SquadMembers.Add(new SquadMember
+            {
+                TeamId = team.Id,
+                PlayerId = players[p.Player.ProviderId].Id,
+                Jersey = p.Player.Jersey,
+                Position = p.Player.Position,
+                Age = p.Age,
+                Nationality = p.Nationality,
+                FlagUrl = p.FlagUrl,
+                UpdatedAt = now
+            });
+        }
+
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return squad.Count;
+    }
+
     private async Task<(Match Match, bool BecameFinished)> UpsertMatchAsync(MatchSummary s, CancellationToken ct)
     {
         var home = await UpsertTeamAsync(s.Home, ct);

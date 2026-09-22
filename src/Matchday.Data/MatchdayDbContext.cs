@@ -25,6 +25,7 @@ public class MatchdayDbContext(DbContextOptions<MatchdayDbContext> options) : Db
     public DbSet<MatchIncident> Incidents => Set<MatchIncident>();
     public DbSet<StandingEntry> Standings => Set<StandingEntry>();
     public DbSet<SyncState> SyncStates => Set<SyncState>();
+    public DbSet<SquadMember> SquadMembers => Set<SquadMember>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -58,6 +59,14 @@ public class MatchdayDbContext(DbContextOptions<MatchdayDbContext> options) : Db
             e.HasOne(x => x.PrimaryPlayer).WithMany().HasForeignKey(x => x.PrimaryPlayerId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.SecondaryPlayer).WithMany().HasForeignKey(x => x.SecondaryPlayerId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<Team>().WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        b.Entity<SquadMember>(e =>
+        {
+            e.HasIndex(x => new { x.TeamId, x.PlayerId }).IsUnique();
+            e.Property(x => x.Position).HasMaxLength(4);
+            e.HasOne(x => x.Player).WithMany().HasForeignKey(x => x.PlayerId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Team>().WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<SyncState>(e =>

@@ -10,4 +10,7 @@ public interface IFootballProvider
 
     /// <summary>Current league table.</summary>
     Task<IReadOnlyList<StandingRow>> GetStandingsAsync(CancellationToken ct = default);
+
+    /// <summary>A club's current squad; empty if the provider doesn't know the team.</summary>
+    Task<IReadOnlyList<SquadPlayer>> GetSquadAsync(string teamId, CancellationToken ct = default);
 }

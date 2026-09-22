@@ -1,4 +1,5 @@
 using System.Globalization;
+using Matchday.Core;
 using Matchday.Core.Providers;
 using Matchday.Data;
 using Matchday.Data.Entities;
@@ -17,6 +18,7 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
     private static readonly TimeSpan StandingsInterval = TimeSpan.FromHours(6);
     private static readonly TimeSpan LiveDetailInterval = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan LineupCheckInterval = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan SquadInterval = TimeSpan.FromHours(24);
 
     private DateTimeOffset _lastFixtures = DateTimeOffset.MinValue;
     private DateTimeOffset _lastStandings = DateTimeOffset.MinValue;
@@ -26,12 +28,16 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
     private const int FixtureDaysAhead = 21; // covers international breaks and blank weekends
 
     // Season backfill: walks from the season start up to the fixture window, a few days per tick.
-    // Progress is stored in SyncState so a restart or deploy doesn't rescan the season.
-    private const int SeasonStartMonth = 8; // the Premier League starts in August
+    // Progress is stored in SyncStates so a restart or deploy doesn't rescan the season.
     private const int BackfillDaysPerTick = 3;
     private const string BackfillKey = "season-backfill-through";
     private DateOnly? _backfilledThrough;
     private bool _backfillMarkLoaded;
+
+    // Squads: every club's roster once a day. The last run is stored in SyncStates so deploys don't refetch.
+    private const string SquadsKey = "squads-synced-at";
+    private DateTimeOffset? _squadsSyncedAt;
+    private bool _squadsMarkLoaded;
 
     private sealed record Candidate(
         string ProviderId,
@@ -117,6 +123,9 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
             log.LogInformation("Standings synced");
         }
 
+        // 5. Squads, once a day.
+        await SyncSquadsIfDueAsync(now, ct);
+
         foreach (var stale in _lastDetail.Where(kv => now - kv.Value > TimeSpan.FromDays(1)).Select(kv => kv.Key).ToList())
             _lastDetail.Remove(stale);
     }
@@ -130,11 +139,12 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
     {
         if (!_backfillMarkLoaded)
         {
-            _backfilledThrough = await ReadBackfillMarkAsync(ct);
+            _backfilledThrough = DateOnly.TryParseExact(await ReadStateAsync(BackfillKey, ct), "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var mark) ? mark : null;
             _backfillMarkLoaded = true;
         }
 
-        var seasonStart = SeasonStart(today);
+        var seasonStart = Season.StartFor(today);
         var target = today.AddDays(-FixtureDaysBack - 1); // the fixture window covers everything after this
         var from = _backfilledThrough is { } done && done >= seasonStart ? done.AddDays(1) : seasonStart;
         if (from > target) return false;
@@ -149,7 +159,7 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
             anyFinished |= await WithSync(s => s.SyncDayAsync(day, ct));
         }
 
-        await WriteBackfillMarkAsync(until, now, ct);
+        await WriteStateAsync(BackfillKey, until.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), now, ct);
         _backfilledThrough = until;
         log.LogInformation(until == target
             ? "Season backfill complete ({From} to {Until})"
@@ -157,32 +167,61 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
         return anyFinished;
     }
 
-    /// <summary>1 August of the current season: this year from July on, otherwise last year.</summary>
-    private static DateOnly SeasonStart(DateOnly today) =>
-        new(today.Month >= SeasonStartMonth - 1 ? today.Year : today.Year - 1, SeasonStartMonth, 1);
-
-    private async Task<DateOnly?> ReadBackfillMarkAsync(CancellationToken ct)
+    /// <summary>Refreshes every club in the table once per SquadInterval. A failure for one club doesn't stop the rest.</summary>
+    private async Task SyncSquadsIfDueAsync(DateTimeOffset now, CancellationToken ct)
     {
-        await using var scope = scopes.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<MatchdayDbContext>();
-        var value = await db.SyncStates.AsNoTracking()
-            .Where(s => s.Key == BackfillKey)
-            .Select(s => s.Value)
-            .FirstOrDefaultAsync(ct);
-        return DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null;
+        if (!_squadsMarkLoaded)
+        {
+            _squadsSyncedAt = DateTimeOffset.TryParse(await ReadStateAsync(SquadsKey, ct), CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal, out var at) ? at : null;
+            _squadsMarkLoaded = true;
+        }
+        if (_squadsSyncedAt is { } last && now - last < SquadInterval) return;
+
+        List<string> teamIds;
+        await using (var scope = scopes.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MatchdayDbContext>();
+            teamIds = await db.Standings.AsNoTracking().OrderBy(s => s.Position).Select(s => s.Team.ProviderId).ToListAsync(ct);
+        }
+        if (teamIds.Count == 0) return; // standings not synced yet; try next tick
+
+        var players = 0;
+        foreach (var teamId in teamIds)
+        {
+            try
+            {
+                players += await WithSync(s => s.SyncSquadAsync(teamId, ct));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                log.LogWarning(ex, "Squad sync failed for team {TeamId}", teamId);
+            }
+        }
+
+        await WriteStateAsync(SquadsKey, now.ToString("O", CultureInfo.InvariantCulture), now, ct);
+        _squadsSyncedAt = now;
+        log.LogInformation("Squads synced ({Teams} clubs, {Players} players)", teamIds.Count, players);
     }
 
-    private async Task WriteBackfillMarkAsync(DateOnly through, DateTimeOffset now, CancellationToken ct)
+    private async Task<string?> ReadStateAsync(string key, CancellationToken ct)
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<MatchdayDbContext>();
-        var row = await db.SyncStates.FirstOrDefaultAsync(s => s.Key == BackfillKey, ct);
+        return await db.SyncStates.AsNoTracking().Where(s => s.Key == key).Select(s => s.Value).FirstOrDefaultAsync(ct);
+    }
+
+    private async Task WriteStateAsync(string key, string value, DateTimeOffset now, CancellationToken ct)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<MatchdayDbContext>();
+        var row = await db.SyncStates.FirstOrDefaultAsync(s => s.Key == key, ct);
         if (row is null)
         {
-            row = new SyncState { Key = BackfillKey, Value = "" };
+            row = new SyncState { Key = key, Value = value };
             db.SyncStates.Add(row);
         }
-        row.Value = through.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        row.Value = value;
         row.UpdatedAt = now;
         await db.SaveChangesAsync(ct);
     }

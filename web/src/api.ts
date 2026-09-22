@@ -73,6 +73,39 @@ export interface Standing {
   points: number
 }
 
+export interface SquadPlayer {
+  playerId: number
+  name: string
+  jersey: string | null
+  /** G, D, M or F */
+  position: string | null
+  age: number | null
+  nationality: string | null
+  flagUrl: string | null
+  apps: number
+  goals: number
+  assists: number
+  yellowCards: number
+  redCards: number
+}
+
+export interface SeasonStats {
+  /** How many of this team's matches the averages cover */
+  matches: number
+  team: TeamStats
+  league: TeamStats
+}
+
+export interface TeamPage {
+  team: Team
+  venue: string | null
+  table: Standing[]
+  /** This season's matches, oldest first */
+  matches: MatchListItem[]
+  squad: SquadPlayer[]
+  stats: SeasonStats | null
+}
+
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`/api${path}`, { signal })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
@@ -83,4 +116,5 @@ export const api = {
   matches: (signal?: AbortSignal) => get<MatchListItem[]>('/matches', signal),
   match: (id: string, signal?: AbortSignal) => get<MatchDetail>(`/matches/${id}`, signal),
   standings: (signal?: AbortSignal) => get<Standing[]>('/standings', signal),
+  team: (id: string, signal?: AbortSignal) => get<TeamPage>(`/teams/${id}`, signal),
 }

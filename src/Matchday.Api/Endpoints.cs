@@ -1,3 +1,5 @@
+using Matchday.Core;
+using Matchday.Core.Providers;
 using Matchday.Data;
 using Matchday.Data.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -25,6 +27,17 @@ public sealed record StandingDto(
     int Position, TeamDto Team, int Played, int Won, int Drawn, int Lost,
     int GoalsFor, int GoalsAgainst, int GoalDifference, int Points);
 
+public sealed record SquadPlayerDto(
+    int PlayerId, string Name, string? Jersey, string? Position, int? Age, string? Nationality, string? FlagUrl,
+    int Apps, int Goals, int Assists, int YellowCards, int RedCards);
+
+/// <summary>Per-match averages of the stored ESPN team stats: this team's, and every side in the league's.</summary>
+public sealed record SeasonStatsDto(int Matches, IReadOnlyDictionary<string, double> Team, IReadOnlyDictionary<string, double> League);
+
+public sealed record TeamPageDto(
+    TeamDto Team, string? Venue, IReadOnlyList<StandingDto> Table, IReadOnlyList<MatchListItemDto> Matches,
+    IReadOnlyList<SquadPlayerDto> Squad, SeasonStatsDto? Stats);
+
 public static class Endpoints
 {
     private static readonly TimeZoneInfo Eastern = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
@@ -35,6 +48,7 @@ public static class Endpoints
         api.MapGet("/matches", GetMatches);
         api.MapGet("/matches/{id:int}", GetMatch);
         api.MapGet("/standings", GetStandings);
+        api.MapGet("/teams/{id:int}", GetTeam);
     }
 
     private static async Task<IResult> GetMatches(
@@ -110,10 +124,113 @@ public static class Endpoints
             .OrderBy(s => s.Position)
             .ToListAsync(ct);
 
-        return Results.Ok(rows.Select(s => new StandingDto(
-            s.Position, ToTeam(s.Team), s.Played, s.Won, s.Drawn, s.Lost,
-            s.GoalsFor, s.GoalsAgainst, s.GoalsFor - s.GoalsAgainst, s.Points)));
+        return Results.Ok(rows.Select(ToStanding));
     }
+
+    private static readonly string[] PositionOrder = ["G", "D", "M", "F"];
+
+    /// <summary>Everything the team page shows. Match-derived numbers (form, record, splits) are computed client-side from Matches.</summary>
+    private static async Task<IResult> GetTeam(int id, MatchdayDbContext db, TimeProvider clock, CancellationToken ct)
+    {
+        var team = await db.Teams.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (team is null) return Results.NotFound();
+
+        var todayEt = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(clock.GetUtcNow(), Eastern).DateTime);
+        var seasonStartUtc = StartOfEasternDayUtc(Season.StartFor(todayEt));
+
+        var matches = await db.Matches.AsNoTracking()
+            .Include(m => m.HomeTeam)
+            .Include(m => m.AwayTeam)
+            .Where(m => (m.HomeTeamId == id || m.AwayTeamId == id) && m.KickoffUtc >= seasonStartUtc)
+            .OrderBy(m => m.KickoffUtc)
+            .ToListAsync(ct);
+
+        var table = await db.Standings.AsNoTracking()
+            .Include(s => s.Team)
+            .OrderBy(s => s.Position)
+            .ToListAsync(ct);
+
+        // Home ground = the venue of most of this team's home matches.
+        var venue = matches.Where(m => m.HomeTeamId == id && m.Venue != null)
+            .GroupBy(m => m.Venue!)
+            .OrderByDescending(g => g.Count())
+            .Select(g => g.Key)
+            .FirstOrDefault();
+
+        var finishedIds = matches.Where(m => m.Status == MatchStatus.FullTime).Select(m => m.Id).ToList();
+
+        var members = await db.SquadMembers.AsNoTracking()
+            .Include(s => s.Player)
+            .Where(s => s.TeamId == id)
+            .ToListAsync(ct);
+        var playerIds = members.Select(s => (int?)s.PlayerId).ToList();
+
+        var starts = await db.LineupEntries.AsNoTracking()
+            .Where(l => finishedIds.Contains(l.MatchId) && l.Starter && playerIds.Contains(l.PlayerId))
+            .Select(l => new { l.PlayerId, l.MatchId })
+            .ToListAsync(ct);
+        var incidents = await db.Incidents.AsNoTracking()
+            .Where(i => finishedIds.Contains(i.MatchId)
+                        && (playerIds.Contains(i.PrimaryPlayerId) || playerIds.Contains(i.SecondaryPlayerId)))
+            .Select(i => new { i.MatchId, i.Type, i.PrimaryPlayerId, i.SecondaryPlayerId })
+            .ToListAsync(ct);
+
+        // Appearances = started, or came on (a substitution's primary player is the one coming on).
+        var apps = starts.Select(s => (s.PlayerId, s.MatchId))
+            .Concat(incidents.Where(i => i.Type == MatchEventType.Substitution && i.PrimaryPlayerId is not null)
+                .Select(i => (PlayerId: i.PrimaryPlayerId!.Value, i.MatchId)))
+            .Distinct()
+            .GroupBy(x => x.PlayerId)
+            .ToDictionary(g => g.Key, g => g.Count());
+        int CountOf(int playerId, Func<MatchEventType, bool> type, bool secondary = false) =>
+            incidents.Count(i => type(i.Type) && (secondary ? i.SecondaryPlayerId : i.PrimaryPlayerId) == playerId);
+
+        static int JerseyNumber(string? j) => int.TryParse(j, out var n) ? n : 999;
+        static int PositionRank(string? p) => Array.IndexOf(PositionOrder, p) is var i and >= 0 ? i : PositionOrder.Length;
+
+        var squad = members
+            .OrderBy(s => PositionRank(s.Position))
+            .ThenBy(s => JerseyNumber(s.Jersey))
+            .Select(s => new SquadPlayerDto(
+                s.PlayerId, s.Player.Name, s.Jersey, s.Position, s.Age, s.Nationality, s.FlagUrl,
+                apps.GetValueOrDefault(s.PlayerId),
+                CountOf(s.PlayerId, t => t is MatchEventType.Goal or MatchEventType.PenaltyGoal),
+                CountOf(s.PlayerId, t => t is MatchEventType.Goal, secondary: true),
+                CountOf(s.PlayerId, t => t is MatchEventType.YellowCard),
+                CountOf(s.PlayerId, t => t is MatchEventType.RedCard)))
+            .ToList();
+
+        var stats = await SeasonStatsAsync(db, id, seasonStartUtc, ct);
+
+        return Results.Ok(new TeamPageDto(
+            ToTeam(team), venue, table.Select(ToStanding).ToList(), matches.Select(ToListItem).ToList(), squad, stats));
+    }
+
+    /// <summary>Averages each stored stat over this team's finished matches, and over every side of every finished match.</summary>
+    private static async Task<SeasonStatsDto?> SeasonStatsAsync(MatchdayDbContext db, int teamId, DateTimeOffset fromUtc, CancellationToken ct)
+    {
+        var rows = await db.Matches.AsNoTracking()
+            .Where(m => m.Status == MatchStatus.FullTime && m.KickoffUtc >= fromUtc && m.HomeStats != null && m.AwayStats != null)
+            .Select(m => new { m.HomeTeamId, m.AwayTeamId, m.HomeStats, m.AwayStats })
+            .ToListAsync(ct);
+
+        var teamSides = rows.Where(r => r.HomeTeamId == teamId).Select(r => r.HomeStats!)
+            .Concat(rows.Where(r => r.AwayTeamId == teamId).Select(r => r.AwayStats!))
+            .ToList();
+        if (teamSides.Count == 0) return null;
+
+        var allSides = rows.SelectMany(r => new[] { r.HomeStats!, r.AwayStats! }).ToList();
+        return new SeasonStatsDto(teamSides.Count, Average(teamSides), Average(allSides));
+    }
+
+    private static Dictionary<string, double> Average(IReadOnlyList<Dictionary<string, double>> sides) =>
+        sides.SelectMany(s => s)
+            .GroupBy(kv => kv.Key)
+            .ToDictionary(g => g.Key, g => Math.Round(g.Average(kv => kv.Value), 2));
+
+    private static StandingDto ToStanding(StandingEntry s) => new(
+        s.Position, ToTeam(s.Team), s.Played, s.Won, s.Drawn, s.Lost,
+        s.GoalsFor, s.GoalsAgainst, s.GoalsFor - s.GoalsAgainst, s.Points);
 
     private static MatchListItemDto ToListItem(Match m) => new(
         m.Id, m.KickoffUtc, m.Status.ToString(), m.ClockDisplay,

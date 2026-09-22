@@ -65,6 +65,13 @@ public sealed record MatchDetail(
     IReadOnlyList<MatchEvent> Events,
     IReadOnlyList<TeamStats> Stats);
 
+/// <summary>One player in a club's current squad. Player.Position is G, D, M or F.</summary>
+public sealed record SquadPlayer(
+    PlayerRef Player,
+    int? Age,
+    string? Nationality,
+    string? FlagUrl);
+
 public sealed record StandingRow(
     int Position,
     TeamRef Team,

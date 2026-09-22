@@ -30,6 +30,12 @@ public sealed class EspnFootballProvider(HttpClient http) : IFootballProvider
         return EspnMapper.MapStandings(doc!.RootElement);
     }
 
+    public async Task<IReadOnlyList<SquadPlayer>> GetSquadAsync(string teamId, CancellationToken ct = default)
+    {
+        using var doc = await GetJsonAsync($"apis/site/v2/sports/soccer/{League}/teams/{Uri.EscapeDataString(teamId)}/roster", nullOnMissing: true, ct);
+        return doc is null ? [] : EspnMapper.MapRoster(doc.RootElement);
+    }
+
     private async Task<JsonDocument?> GetJsonAsync(string path, bool nullOnMissing, CancellationToken ct)
     {
         using var resp = await http.GetAsync(path, ct);

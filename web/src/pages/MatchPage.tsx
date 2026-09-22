@@ -51,18 +51,18 @@ export default function MatchPage() {
       <Link to="/" className="back muted">← Matches</Link>
 
       <div className="scoreboard card">
-        <div className="side">
+        <Link to={`/team/${m.home.id}`} className="side team-link">
           {m.home.logoUrl && <img src={m.home.logoUrl} alt="" />}
           <span>{m.home.name}</span>
-        </div>
+        </Link>
         <div className="score">
           {m.homeScore ?? '–'} – {m.awayScore ?? '–'}
           <span className={`status ${live ? 'live' : ''}`}>{statusLabel(m)}</span>
         </div>
-        <div className="side">
+        <Link to={`/team/${m.away.id}`} className="side team-link">
           {m.away.logoUrl && <img src={m.away.logoUrl} alt="" />}
           <span>{m.away.name}</span>
-        </div>
+        </Link>
       </div>
       <p className="meta muted">
         {formatDay(m.kickoffUtc)} · {formatTime(m.kickoffUtc)} ET{m.venue ? ` · ${m.venue}` : ''}
@@ -100,7 +100,7 @@ function LineupCard({ team, lineup, marks }: { team: Team; lineup: TeamLineup | 
   return (
     <div className="lineup card">
       <div className="lineup-head">
-        <TeamBadge team={team} short />
+        <Link to={`/team/${team.id}`} className="team-link"><TeamBadge team={team} short /></Link>
         <span className="muted">{lineup?.formation}</span>
       </div>
       {!lineup ? (
