@@ -51,10 +51,19 @@ public sealed record MatchEvent(
     PlayerRef? Secondary,
     string? Detail);
 
+/// <summary>
+/// One team's match stats, keyed by the provider's stat name (e.g. "possessionPct", "totalShots").
+/// A loose map so new stats flow through without code changes.
+/// </summary>
+public sealed record TeamStats(
+    string TeamProviderId,
+    IReadOnlyDictionary<string, double> Values);
+
 public sealed record MatchDetail(
     MatchSummary Summary,
     IReadOnlyList<TeamLineup> Lineups,
-    IReadOnlyList<MatchEvent> Events);
+    IReadOnlyList<MatchEvent> Events,
+    IReadOnlyList<TeamStats> Stats);
 
 public sealed record StandingRow(
     int Position,

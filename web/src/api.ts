@@ -47,12 +47,17 @@ export interface Incident {
   secondaryPlayer: string | null
 }
 
+/** ESPN stat name → value, e.g. { possessionPct: 55, totalShots: 16 } */
+export type TeamStats = Record<string, number>
+
 export interface MatchDetail {
   match: MatchListItem
   homeLineup: TeamLineup | null
   awayLineup: TeamLineup | null
   incidents: Incident[]
   detailSyncedAt: string | null
+  homeStats: TeamStats | null
+  awayStats: TeamStats | null
 }
 
 export interface Standing {

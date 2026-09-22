@@ -50,6 +50,25 @@ public class EspnMapperTests
     }
 
     [Fact]
+    public void Summary_maps_team_stats_by_team()
+    {
+        var d = EspnMapper.MapSummary(Load("summary-fulltime.json"), "401879272");
+
+        Assert.NotNull(d);
+        Assert.Equal(2, d.Stats.Count);
+        var home = Assert.Single(d.Stats, s => s.TeamProviderId == d.Summary.Home.ProviderId).Values;
+        var away = Assert.Single(d.Stats, s => s.TeamProviderId == d.Summary.Away.ProviderId).Values;
+
+        Assert.Equal(55, home["possessionPct"]);
+        Assert.Equal(16, home["totalShots"]);
+        Assert.Equal(6, home["shotsOnTarget"]);
+        Assert.Equal(470, home["totalPasses"]);
+        Assert.Equal(403, home["accuratePasses"]);
+        Assert.Equal(4, home["saves"]);
+        Assert.InRange(home["possessionPct"] + away["possessionPct"], 99, 101);
+    }
+
+    [Fact]
     public void Standings_maps_twenty_teams_in_order()
     {
         var rows = EspnMapper.MapStandings(Load("standings.json"));

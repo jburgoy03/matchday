@@ -83,6 +83,14 @@ public sealed class MatchSyncService(
             }
         }
 
+        // Team stats: only overwrite when the provider sent some, so a thin response can't blank them.
+        foreach (var s in detail.Stats)
+        {
+            var values = new Dictionary<string, double>(s.Values);
+            if (s.TeamProviderId == detail.Summary.Home.ProviderId) match.HomeStats = values;
+            else if (s.TeamProviderId == detail.Summary.Away.ProviderId) match.AwayStats = values;
+        }
+
         var sequence = 0;
         foreach (var e in detail.Events)
         {

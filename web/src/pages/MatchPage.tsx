@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { api, type Incident, type LineupPlayer, type Team, type TeamLineup } from '../api'
 import { useApi } from '../useApi'
 import { TeamBadge } from '../components/TeamBadge'
+import { MatchStats } from '../components/MatchStats'
 import { formatDay, formatTime, isLive, statusLabel } from '../format'
+
+type Tab = 'timeline' | 'stats' | 'lineups'
 
 const ICONS: Record<Incident['type'], string> = {
   Goal: '⚽',
@@ -28,6 +31,7 @@ function describe(i: Incident): string {
 
 export default function MatchPage() {
   const { id = '' } = useParams()
+  const [params, setParams] = useSearchParams()
   const [tick, setTick] = useState(0)
   const { data, error } = useApi(signal => api.match(id, signal), [id, tick])
 
@@ -41,7 +45,19 @@ export default function MatchPage() {
   if (error) return <p className="error">Couldn't load this match: {error}</p>
   if (!data) return <p className="muted">Loading…</p>
 
-  const { match: m, homeLineup, awayLineup, incidents } = data
+  const { match: m, homeLineup, awayLineup, incidents, homeStats, awayStats } = data
+
+  // Pre-match ESPN can send all-zero stats, so only offer the tab once the match has started.
+  const hasStats = !!homeStats && !!awayStats && Object.keys(homeStats).length > 0 && m.status !== 'Scheduled'
+
+  const tabs: { id: Tab; label: string }[] = [
+    { id: 'timeline', label: 'Timeline' },
+    ...(hasStats ? [{ id: 'stats' as const, label: 'Stats' }] : []),
+    { id: 'lineups', label: 'Lineups' },
+  ]
+  const requested = params.get('tab')
+  const tab: Tab = tabs.find(t => t.id === requested)?.id ?? (m.status === 'Scheduled' ? 'lineups' : 'timeline')
+  const select = (t: Tab) => setParams({ tab: t }, { replace: true })
 
   // Goal and card icons to show next to player names in the lineups.
   const marks = new Map<string, string>()
@@ -72,30 +88,44 @@ export default function MatchPage() {
         {formatDay(m.kickoffUtc)} · {formatTime(m.kickoffUtc)} ET{m.venue ? ` · ${m.venue}` : ''}
       </p>
 
-      <h2>Timeline</h2>
-      {incidents.length === 0 ? (
-        <p className="muted">No events yet.</p>
-      ) : (
-        <ol className="timeline card">
-          {incidents.map((i, idx) => (
-            <li key={idx}>
-              <span className="minute">{i.clock}</span>
-              <span>{ICONS[i.type]}</span>
-              <span>{describe(i)}</span>
-              <span className="muted abbr">{i.teamId === m.home.id ? m.home.abbreviation : m.away.abbreviation}</span>
-            </li>
-          ))}
-        </ol>
+      <div className="tabs" role="tablist">
+        {tabs.map(t => (
+          <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => select(t.id)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'timeline' && (
+        incidents.length === 0 ? (
+          <p className="muted">No events yet.</p>
+        ) : (
+          <ol className="timeline card">
+            {incidents.map((i, idx) => (
+              <li key={idx}>
+                <span className="minute">{i.clock}</span>
+                <span>{ICONS[i.type]}</span>
+                <span>{describe(i)}</span>
+                <span className="muted abbr">{i.teamId === m.home.id ? m.home.abbreviation : m.away.abbreviation}</span>
+              </li>
+            ))}
+          </ol>
+        )
       )}
 
-      <h2>Lineups</h2>
-      {!homeLineup && !awayLineup ? (
-        <p className="muted">Lineups usually appear about an hour before kickoff.</p>
-      ) : (
-        <div className="lineups">
-          <LineupCard team={m.home} lineup={homeLineup} marks={marks} />
-          <LineupCard team={m.away} lineup={awayLineup} marks={marks} />
-        </div>
+      {tab === 'stats' && homeStats && awayStats && (
+        <MatchStats home={m.home} away={m.away} homeStats={homeStats} awayStats={awayStats} />
+      )}
+
+      {tab === 'lineups' && (
+        !homeLineup && !awayLineup ? (
+          <p className="muted">Lineups usually appear about an hour before kickoff.</p>
+        ) : (
+          <div className="lineups">
+            <LineupCard team={m.home} lineup={homeLineup} marks={marks} />
+            <LineupCard team={m.away} lineup={awayLineup} marks={marks} />
+          </div>
+        )
       )}
     </section>
   )

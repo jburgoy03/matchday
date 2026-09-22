@@ -23,7 +23,11 @@ public static partial class EspnMapper
         var summary = MapCompetition(root.Str("header", "id") ?? matchId, comp.Value, root.Str("gameInfo", "venue", "fullName"));
         var lineups = root.Arr("rosters").Select(MapLineup).ToList();
         var events = root.Arr("keyEvents").Select(MapEvent).OfType<MatchEvent>().ToList();
-        return new MatchDetail(summary, lineups, events);
+        var stats = root.Arr("boxscore", "teams")
+            .Select(MapTeamStats)
+            .Where(s => s.TeamProviderId != "" && s.Values.Count > 0)
+            .ToList();
+        return new MatchDetail(summary, lineups, events, stats);
     }
 
     public static IReadOnlyList<StandingRow> MapStandings(JsonElement root) =>
@@ -94,6 +98,21 @@ public static partial class EspnMapper
                 p.Str("position", "abbreviation")),
             p.Bool("starter"),
             p.Int("formationPlace") is > 0 and var fp ? fp : null)).ToList());
+
+    /// <summary>
+    /// boxscore.teams[] → name/number map. Matched to a side by team id, not array position.
+    /// Values come from displayValue ("55", "0.4"); anything non-numeric is skipped.
+    /// </summary>
+    private static TeamStats MapTeamStats(JsonElement t) => new(
+        t.Str("team", "id") ?? "",
+        t.Arr("statistics")
+            .Select(s => (Name: s.Str("name"), Value: ParseStat(s.Str("displayValue"))))
+            .Where(x => x.Name is not null && x.Value is not null)
+            .GroupBy(x => x.Name!)
+            .ToDictionary(g => g.Key, g => g.First().Value!.Value));
+
+    private static double? ParseStat(string? s) =>
+        double.TryParse(s?.Trim().TrimEnd('%'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : null;
 
     private static MatchEvent? MapEvent(JsonElement e)
     {

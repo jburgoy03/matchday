@@ -38,7 +38,11 @@ public class Match
     public string? HomeFormation { get; set; }
     public string? AwayFormation { get; set; }
 
-    /// <summary>When lineups/events were last pulled; null = never.</summary>
+    /// <summary>Team match stats (jsonb), keyed by ESPN stat name, e.g. "possessionPct" → 55. Null = never pulled.</summary>
+    public Dictionary<string, double>? HomeStats { get; set; }
+    public Dictionary<string, double>? AwayStats { get; set; }
+
+    /// <summary>When lineups/events/stats were last pulled; null = never.</summary>
     public DateTimeOffset? DetailSyncedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 

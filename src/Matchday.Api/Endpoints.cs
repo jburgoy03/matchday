@@ -18,7 +18,8 @@ public sealed record IncidentDto(string Type, int? Minute, string Clock, int? Te
 
 public sealed record MatchDetailDto(
     MatchListItemDto Match, TeamLineupDto? HomeLineup, TeamLineupDto? AwayLineup,
-    IReadOnlyList<IncidentDto> Incidents, DateTimeOffset? DetailSyncedAt);
+    IReadOnlyList<IncidentDto> Incidents, DateTimeOffset? DetailSyncedAt,
+    IReadOnlyDictionary<string, double>? HomeStats, IReadOnlyDictionary<string, double>? AwayStats);
 
 public sealed record StandingDto(
     int Position, TeamDto Team, int Played, int Won, int Drawn, int Lost,
@@ -97,7 +98,9 @@ public static class Endpoints
             Lineup(m.HomeTeamId, m.HomeFormation),
             Lineup(m.AwayTeamId, m.AwayFormation),
             incidents,
-            m.DetailSyncedAt));
+            m.DetailSyncedAt,
+            m.HomeStats,
+            m.AwayStats));
     }
 
     private static async Task<IResult> GetStandings(MatchdayDbContext db, CancellationToken ct)
