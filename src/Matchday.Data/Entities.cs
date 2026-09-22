@@ -81,6 +81,14 @@ public class MatchIncident
     public string? Detail { get; set; }
 }
 
+/// <summary>Small key/value store for the worker's progress (e.g. how far the season backfill has got).</summary>
+public class SyncState
+{
+    public required string Key { get; set; }
+    public required string Value { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 public class StandingEntry
 {
     public int Id { get; set; }

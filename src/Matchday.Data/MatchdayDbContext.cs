@@ -24,6 +24,7 @@ public class MatchdayDbContext(DbContextOptions<MatchdayDbContext> options) : Db
     public DbSet<LineupEntry> LineupEntries => Set<LineupEntry>();
     public DbSet<MatchIncident> Incidents => Set<MatchIncident>();
     public DbSet<StandingEntry> Standings => Set<StandingEntry>();
+    public DbSet<SyncState> SyncStates => Set<SyncState>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -57,6 +58,12 @@ public class MatchdayDbContext(DbContextOptions<MatchdayDbContext> options) : Db
             e.HasOne(x => x.PrimaryPlayer).WithMany().HasForeignKey(x => x.PrimaryPlayerId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.SecondaryPlayer).WithMany().HasForeignKey(x => x.SecondaryPlayerId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<Team>().WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        b.Entity<SyncState>(e =>
+        {
+            e.HasKey(x => x.Key);
+            e.Property(x => x.Key).HasMaxLength(64);
         });
 
         b.Entity<StandingEntry>(e =>

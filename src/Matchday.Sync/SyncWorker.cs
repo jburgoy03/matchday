@@ -1,5 +1,7 @@
+using System.Globalization;
 using Matchday.Core.Providers;
 using Matchday.Data;
+using Matchday.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -22,6 +24,14 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
 
     private const int FixtureDaysBack = 3;
     private const int FixtureDaysAhead = 21; // covers international breaks and blank weekends
+
+    // Season backfill: walks from the season start up to the fixture window, a few days per tick.
+    // Progress is stored in SyncState so a restart or deploy doesn't rescan the season.
+    private const int SeasonStartMonth = 8; // the Premier League starts in August
+    private const int BackfillDaysPerTick = 3;
+    private const string BackfillKey = "season-backfill-through";
+    private DateOnly? _backfilledThrough;
+    private bool _backfillMarkLoaded;
 
     private sealed record Candidate(
         string ProviderId,
@@ -58,7 +68,7 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
         var anyFinished = false;
 
         // 1. Fixture window. Overlapping days cover ESPN's date buckets not matching UTC.
-                if (now - _lastFixtures >= FixtureInterval)
+        if (now - _lastFixtures >= FixtureInterval)
         {
             for (var d = today.AddDays(-FixtureDaysBack); d <= today.AddDays(FixtureDaysAhead); d = d.AddDays(1))
             {
@@ -69,7 +79,10 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
             log.LogInformation("Fixture window synced ({From} to {To})", today.AddDays(-FixtureDaysBack), today.AddDays(FixtureDaysAhead));
         }
 
-        // 2. Match detail for anything live, about to start, or recently finished.
+        // 2. Season backfill: earlier matches this season, a few days per tick until caught up.
+        anyFinished |= await BackfillSeasonAsync(today, now, ct);
+
+        // 3. Match detail for anything live, about to start, recently finished, or never detail-synced.
         List<Candidate> candidates;
         await using (var scope = scopes.CreateAsyncScope())
         {
@@ -84,7 +97,7 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
                 .ToListAsync(ct);
         }
 
-                var backfills = 0;
+        var backfills = 0;
         foreach (var c in candidates)
         {
             if (Due(c, now) is not { } interval) continue;
@@ -96,7 +109,7 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
             log.LogInformation("Synced detail for match {MatchId} (was {Status})", c.ProviderId, c.Status);
         }
 
-        // 3. Standings on a schedule, or right after a result.
+        // 4. Standings on a schedule, or right after a result.
         if (anyFinished || now - _lastStandings >= StandingsInterval)
         {
             await WithSync(async s => { await s.SyncStandingsAsync(ct); return true; });
@@ -106,6 +119,72 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
 
         foreach (var stale in _lastDetail.Where(kv => now - kv.Value > TimeSpan.FromDays(1)).Select(kv => kv.Key).ToList())
             _lastDetail.Remove(stale);
+    }
+
+    /// <summary>
+    /// Pulls scoreboards from the season start up to the day before the fixture window, BackfillDaysPerTick per call.
+    /// New finished matches come in with DetailSyncedAt null, so the detail backfill fills their lineups and stats.
+    /// Returns true if any match newly reached full time (i.e. new results were inserted).
+    /// </summary>
+    private async Task<bool> BackfillSeasonAsync(DateOnly today, DateTimeOffset now, CancellationToken ct)
+    {
+        if (!_backfillMarkLoaded)
+        {
+            _backfilledThrough = await ReadBackfillMarkAsync(ct);
+            _backfillMarkLoaded = true;
+        }
+
+        var seasonStart = SeasonStart(today);
+        var target = today.AddDays(-FixtureDaysBack - 1); // the fixture window covers everything after this
+        var from = _backfilledThrough is { } done && done >= seasonStart ? done.AddDays(1) : seasonStart;
+        if (from > target) return false;
+
+        var until = from.AddDays(BackfillDaysPerTick - 1);
+        if (until > target) until = target;
+
+        var anyFinished = false;
+        for (var d = from; d <= until; d = d.AddDays(1))
+        {
+            var day = d;
+            anyFinished |= await WithSync(s => s.SyncDayAsync(day, ct));
+        }
+
+        await WriteBackfillMarkAsync(until, now, ct);
+        _backfilledThrough = until;
+        log.LogInformation(until == target
+            ? "Season backfill complete ({From} to {Until})"
+            : "Season backfill synced {From} to {Until}", from, until);
+        return anyFinished;
+    }
+
+    /// <summary>1 August of the current season: this year from July on, otherwise last year.</summary>
+    private static DateOnly SeasonStart(DateOnly today) =>
+        new(today.Month >= SeasonStartMonth - 1 ? today.Year : today.Year - 1, SeasonStartMonth, 1);
+
+    private async Task<DateOnly?> ReadBackfillMarkAsync(CancellationToken ct)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<MatchdayDbContext>();
+        var value = await db.SyncStates.AsNoTracking()
+            .Where(s => s.Key == BackfillKey)
+            .Select(s => s.Value)
+            .FirstOrDefaultAsync(ct);
+        return DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null;
+    }
+
+    private async Task WriteBackfillMarkAsync(DateOnly through, DateTimeOffset now, CancellationToken ct)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<MatchdayDbContext>();
+        var row = await db.SyncStates.FirstOrDefaultAsync(s => s.Key == BackfillKey, ct);
+        if (row is null)
+        {
+            row = new SyncState { Key = BackfillKey, Value = "" };
+            db.SyncStates.Add(row);
+        }
+        row.Value = through.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        row.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>How often this match needs a detail pull right now; null = leave it alone.</summary>
