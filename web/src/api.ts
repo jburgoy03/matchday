@@ -8,6 +8,16 @@ export interface Team {
 
 export type MatchStatus = 'Scheduled' | 'Live' | 'HalfTime' | 'FullTime' | 'Postponed' | 'Cancelled' | 'Unknown'
 
+export type IncidentType = 'Goal' | 'PenaltyGoal' | 'OwnGoal' | 'YellowCard' | 'RedCard' | 'Substitution' | 'Other'
+
+export interface Goal {
+  type: IncidentType
+  minute: number | null
+  clock: string
+  teamId: number | null
+  player: string | null
+}
+
 export interface MatchListItem {
   id: number
   kickoffUtc: string
@@ -18,6 +28,8 @@ export interface MatchListItem {
   homeScore: number | null
   awayScore: number | null
   venue: string | null
+  /** Goals only, in order. Cards and subs live on the match page. */
+  goals: Goal[]
 }
 
 export interface LineupPlayer {
@@ -36,7 +48,6 @@ export interface TeamLineup {
   bench: LineupPlayer[]
 }
 
-export type IncidentType = 'Goal' | 'PenaltyGoal' | 'OwnGoal' | 'YellowCard' | 'RedCard' | 'Substitution' | 'Other'
 
 export interface Incident {
   type: IncidentType
@@ -106,6 +117,14 @@ export interface TeamPage {
   stats: SeasonStats | null
 }
 
+export interface Leader {
+  playerId: number
+  name: string
+  team: Team | null
+  goals: number
+  assists: number
+}
+
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`/api${path}`, { signal })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
@@ -113,8 +132,10 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
 }
 
 export const api = {
-  matches: (signal?: AbortSignal) => get<MatchListItem[]>('/matches', signal),
+  matches: (range?: { from: string; to: string }, signal?: AbortSignal) =>
+    get<MatchListItem[]>(range ? `/matches?from=${range.from}&to=${range.to}` : '/matches', signal),
   match: (id: string, signal?: AbortSignal) => get<MatchDetail>(`/matches/${id}`, signal),
   standings: (signal?: AbortSignal) => get<Standing[]>('/standings', signal),
+  leaders: (top = 5, signal?: AbortSignal) => get<Leader[]>(`/leaders?top=${top}`, signal),
   team: (id: string, signal?: AbortSignal) => get<TeamPage>(`/teams/${id}`, signal),
 }

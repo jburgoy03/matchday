@@ -8,9 +8,13 @@ namespace Matchday.Api;
 
 public sealed record TeamDto(int Id, string Name, string ShortName, string Abbreviation, string? LogoUrl);
 
+/// <summary>A goal in the match list: enough to print "Haaland 12'" under the right team.</summary>
+public sealed record GoalDto(string Type, int? Minute, string Clock, int? TeamId, string? Player);
+
 public sealed record MatchListItemDto(
     int Id, DateTimeOffset KickoffUtc, string Status, string? Clock,
-    TeamDto Home, TeamDto Away, int? HomeScore, int? AwayScore, string? Venue);
+    TeamDto Home, TeamDto Away, int? HomeScore, int? AwayScore, string? Venue,
+    IReadOnlyList<GoalDto> Goals);
 
 public sealed record LineupPlayerDto(int PlayerId, string Name, string? Jersey, string? Position, bool Starter, int? FormationPlace);
 
@@ -22,6 +26,8 @@ public sealed record MatchDetailDto(
     MatchListItemDto Match, TeamLineupDto? HomeLineup, TeamLineupDto? AwayLineup,
     IReadOnlyList<IncidentDto> Incidents, DateTimeOffset? DetailSyncedAt,
     IReadOnlyDictionary<string, double>? HomeStats, IReadOnlyDictionary<string, double>? AwayStats);
+
+public sealed record LeaderDto(int PlayerId, string Name, TeamDto? Team, int Goals, int Assists);
 
 public sealed record StandingDto(
     int Position, TeamDto Team, int Played, int Won, int Drawn, int Lost,
@@ -49,6 +55,7 @@ public static class Endpoints
         api.MapGet("/matches/{id:int}", GetMatch);
         api.MapGet("/standings", GetStandings);
         api.MapGet("/teams/{id:int}", GetTeam);
+        api.MapGet("/leaders", GetLeaders);
     }
 
     private static async Task<IResult> GetMatches(
@@ -70,7 +77,8 @@ public static class Endpoints
             .OrderBy(m => m.KickoffUtc)
             .ToListAsync(ct);
 
-        return Results.Ok(matches.Select(ToListItem));
+        var goals = await GoalsByMatchAsync(db, matches.Select(m => m.Id).ToList(), ct);
+        return Results.Ok(matches.Select(m => ToListItem(m, goals.GetValueOrDefault(m.Id, []))));
     }
 
     private static async Task<IResult> GetMatch(int id, MatchdayDbContext db, CancellationToken ct)
@@ -108,7 +116,7 @@ public static class Endpoints
             .ToList();
 
         return Results.Ok(new MatchDetailDto(
-            ToListItem(m),
+            ToListItem(m, GoalsOf(m.Incidents)),
             Lineup(m.HomeTeamId, m.HomeFormation),
             Lineup(m.AwayTeamId, m.AwayFormation),
             incidents,
@@ -200,10 +208,12 @@ public static class Endpoints
                 CountOf(s.PlayerId, t => t is MatchEventType.RedCard)))
             .ToList();
 
+        var teamGoals = await GoalsByMatchAsync(db, matches.Select(m => m.Id).ToList(), ct);
         var stats = await SeasonStatsAsync(db, id, seasonStartUtc, ct);
 
         return Results.Ok(new TeamPageDto(
-            ToTeam(team), venue, table.Select(ToStanding).ToList(), matches.Select(ToListItem).ToList(), squad, stats));
+            ToTeam(team), venue, table.Select(ToStanding).ToList(),
+            matches.Select(m => ToListItem(m, teamGoals.GetValueOrDefault(m.Id, []))).ToList(), squad, stats));
     }
 
     /// <summary>Averages each stored stat over this team's finished matches, and over every side of every finished match.</summary>
@@ -232,9 +242,74 @@ public static class Endpoints
         s.Position, ToTeam(s.Team), s.Played, s.Won, s.Drawn, s.Lost,
         s.GoalsFor, s.GoalsAgainst, s.GoalsFor - s.GoalsAgainst, s.Points);
 
-    private static MatchListItemDto ToListItem(Match m) => new(
+    private static readonly MatchEventType[] GoalTypes =
+        [MatchEventType.Goal, MatchEventType.PenaltyGoal, MatchEventType.OwnGoal];
+
+    /// <summary>Goals for a set of matches, so a list of matches costs one extra query instead of one per match.</summary>
+    private static async Task<Dictionary<int, List<GoalDto>>> GoalsByMatchAsync(
+        MatchdayDbContext db, List<int> matchIds, CancellationToken ct)
+    {
+        if (matchIds.Count == 0) return [];
+
+        var rows = await db.Incidents.AsNoTracking()
+            .Where(i => matchIds.Contains(i.MatchId) && GoalTypes.Contains(i.Type))
+            .OrderBy(i => i.MatchId).ThenBy(i => i.Sequence)
+            .Select(i => new { i.MatchId, Goal = new GoalDto(i.Type.ToString(), i.Minute, i.ClockDisplay, i.TeamId, i.PrimaryPlayer!.Name) })
+            .ToListAsync(ct);
+
+        return rows.GroupBy(r => r.MatchId).ToDictionary(g => g.Key, g => g.Select(r => r.Goal).ToList());
+    }
+
+    private static List<GoalDto> GoalsOf(IEnumerable<MatchIncident> incidents) =>
+        incidents.Where(i => GoalTypes.Contains(i.Type))
+            .OrderBy(i => i.Sequence)
+            .Select(i => new GoalDto(i.Type.ToString(), i.Minute, i.ClockDisplay, i.TeamId, i.PrimaryPlayer?.Name))
+            .ToList();
+
+    /// <summary>Top scorers this season, from our own incidents. Ties break on assists, then name.</summary>
+    private static async Task<IResult> GetLeaders(MatchdayDbContext db, TimeProvider clock, int? top, CancellationToken ct)
+    {
+        var todayEt = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(clock.GetUtcNow(), Eastern).DateTime);
+        var seasonStartUtc = StartOfEasternDayUtc(Season.StartFor(todayEt));
+        var limit = Math.Clamp(top ?? 10, 1, 50);
+
+        var rows = await db.Incidents.AsNoTracking()
+            .Where(i => i.PrimaryPlayerId != null
+                        && db.Matches.Any(m => m.Id == i.MatchId && m.KickoffUtc >= seasonStartUtc))
+            .Select(i => new { i.Type, i.PrimaryPlayerId, i.SecondaryPlayerId, i.TeamId })
+            .ToListAsync(ct);
+
+        var goals = rows.Where(r => r.Type is MatchEventType.Goal or MatchEventType.PenaltyGoal).ToList();
+        if (goals.Count == 0) return Results.Ok(Array.Empty<LeaderDto>());
+
+        var assists = rows.Where(r => r.Type == MatchEventType.Goal && r.SecondaryPlayerId != null)
+            .GroupBy(r => r.SecondaryPlayerId!.Value)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var tally = goals.GroupBy(r => r.PrimaryPlayerId!.Value)
+            .Select(g => new { PlayerId = g.Key, Goals = g.Count(), TeamId = g.Select(r => r.TeamId).FirstOrDefault(t => t != null) })
+            .OrderByDescending(x => x.Goals)
+            .ThenByDescending(x => assists.GetValueOrDefault(x.PlayerId))
+            .Take(limit)
+            .ToList();
+
+        var playerIds = tally.Select(t => t.PlayerId).ToList();
+        var names = await db.Players.AsNoTracking().Where(p => playerIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.Name, ct);
+        var teamIds = tally.Select(t => t.TeamId).OfType<int>().Distinct().ToList();
+        var teams = await db.Teams.AsNoTracking().Where(t => teamIds.Contains(t.Id)).ToDictionaryAsync(t => t.Id, ToTeam, ct);
+
+        return Results.Ok(tally
+            .Select(t => new LeaderDto(t.PlayerId, names.GetValueOrDefault(t.PlayerId, ""),
+                t.TeamId is { } id && teams.TryGetValue(id, out var team) ? team : null,
+                t.Goals, assists.GetValueOrDefault(t.PlayerId)))
+            .OrderByDescending(l => l.Goals).ThenByDescending(l => l.Assists).ThenBy(l => l.Name)
+            .ToList());
+    }
+
+    private static MatchListItemDto ToListItem(Match m, IReadOnlyList<GoalDto> goals) => new(
         m.Id, m.KickoffUtc, m.Status.ToString(), m.ClockDisplay,
-        ToTeam(m.HomeTeam), ToTeam(m.AwayTeam), m.HomeScore, m.AwayScore, m.Venue);
+        ToTeam(m.HomeTeam), ToTeam(m.AwayTeam), m.HomeScore, m.AwayScore, m.Venue, goals);
 
     private static TeamDto ToTeam(Team t) => new(t.Id, t.Name, t.ShortName, t.Abbreviation, t.LogoUrl);
 

@@ -18,7 +18,7 @@ export default function TablePage() {
   if (!data) return <p className="muted">Loading…</p>
 
   return (
-    <section>
+    <section className="table-page">
       <h1>Premier League table</h1>
       <div className="table-wrap">
         <table className="standings">

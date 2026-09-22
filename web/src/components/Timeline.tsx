@@ -1,4 +1,5 @@
 import type { Incident, MatchListItem } from '../api'
+import { goalSides, isGoalType, type Side } from '../goals'
 import { TeamBadge } from './TeamBadge'
 
 export const ICONS: Record<Incident['type'], string> = {
@@ -11,14 +12,13 @@ export const ICONS: Record<Incident['type'], string> = {
   Other: '•',
 }
 
-type Side = 'home' | 'away'
 type Score = [number, number]
 
 type Item =
   | { kind: 'event'; incident: Incident; side: Side; score?: Score }
   | { kind: 'divider'; label: string; score: Score | null }
 
-const isGoal = (i: Incident) => i.type === 'Goal' || i.type === 'PenaltyGoal' || i.type === 'OwnGoal'
+const isGoal = (i: Incident) => isGoalType(i.type)
 
 /**
  * Index of the first second-half event. ESPN lists first-half stoppage time (45'+4')
@@ -37,29 +37,8 @@ function halfTimeIndex(incidents: Incident[]): number {
   return incidents.length
 }
 
-/** Which side a goal counts for. Own goals are checked against the final score, since the feed's team id is ambiguous. */
-function goalSides(m: MatchListItem, incidents: Incident[]): Map<Incident, Side> {
-  const tally = (flipOwnGoals: boolean) => {
-    const sides = new Map<Incident, Side>()
-    for (const i of incidents.filter(isGoal)) {
-      let side: Side = i.teamId === m.away.id ? 'away' : 'home'
-      if (i.type === 'OwnGoal' && flipOwnGoals) side = side === 'home' ? 'away' : 'home'
-      sides.set(i, side)
-    }
-    return sides
-  }
-  const matches = (sides: Map<Incident, Side>) => {
-    const vals = [...sides.values()]
-    return vals.filter(s => s === 'home').length === m.homeScore && vals.filter(s => s === 'away').length === m.awayScore
-  }
-  const plain = tally(false)
-  if (matches(plain) || !incidents.some(i => i.type === 'OwnGoal')) return plain
-  const flipped = tally(true)
-  return matches(flipped) ? flipped : plain
-}
-
 function buildItems(m: MatchListItem, incidents: Incident[]): Item[] {
-  const goals = goalSides(m, incidents)
+  const goals = goalSides(m, incidents.filter(isGoal))
   const htAt = halfTimeIndex(incidents)
   const clockMinute = parseInt(m.clock ?? '', 10)
   const pastHalf =
