@@ -1,33 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { api, type Incident, type LineupPlayer, type Team, type TeamLineup } from '../api'
+import { api, type LineupPlayer, type Team, type TeamLineup } from '../api'
 import { useApi } from '../useApi'
 import { TeamBadge } from '../components/TeamBadge'
 import { MatchStats } from '../components/MatchStats'
+import { ICONS, Timeline } from '../components/Timeline'
 import { formatDay, formatTime, isLive, statusLabel } from '../format'
 
 type Tab = 'timeline' | 'stats' | 'lineups'
-
-const ICONS: Record<Incident['type'], string> = {
-  Goal: '⚽',
-  PenaltyGoal: '⚽',
-  OwnGoal: '⚽',
-  YellowCard: '🟨',
-  RedCard: '🟥',
-  Substitution: '🔁',
-  Other: '•',
-}
-
-function describe(i: Incident): string {
-  const who = i.player ?? 'Unknown'
-  switch (i.type) {
-    case 'Goal': return i.secondaryPlayer ? `${who} (assist: ${i.secondaryPlayer})` : who
-    case 'PenaltyGoal': return `${who} (pen)`
-    case 'OwnGoal': return `${who} (OG)`
-    case 'Substitution': return i.secondaryPlayer ? `${who} on for ${i.secondaryPlayer}` : who
-    default: return who
-  }
-}
 
 export default function MatchPage() {
   const { id = '' } = useParams()
@@ -96,22 +76,7 @@ export default function MatchPage() {
         ))}
       </div>
 
-      {tab === 'timeline' && (
-        incidents.length === 0 ? (
-          <p className="muted">No events yet.</p>
-        ) : (
-          <ol className="timeline card">
-            {incidents.map((i, idx) => (
-              <li key={idx}>
-                <span className="minute">{i.clock}</span>
-                <span>{ICONS[i.type]}</span>
-                <span>{describe(i)}</span>
-                <span className="muted abbr">{i.teamId === m.home.id ? m.home.abbreviation : m.away.abbreviation}</span>
-              </li>
-            ))}
-          </ol>
-        )
-      )}
+      {tab === 'timeline' && <Timeline match={m} incidents={incidents} />}
 
       {tab === 'stats' && homeStats && awayStats && (
         <MatchStats home={m.home} away={m.away} homeStats={homeStats} awayStats={awayStats} />
