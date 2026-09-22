@@ -1,8 +1,11 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { api, type MatchListItem, type SquadPlayer, type Standing, type Team, type TeamStats } from '../api'
 import { useApi } from '../useApi'
 import { isLive } from '../format'
+import { BackLink } from '../components/BackLink'
+import { ChevronRight } from '../components/Icons'
+import { teamPath } from '../teamPath'
 
 type Tab = 'overview' | 'matches' | 'squad' | 'stats'
 type Result = 'W' | 'D' | 'L'
@@ -41,10 +44,32 @@ function toPlayed(m: MatchListItem, teamId: number): Played | null {
   return { match: m, home, opponent: home ? m.away : m.home, gf, ga, result: gf > ga ? 'W' : gf === ga ? 'D' : 'L' }
 }
 
-export default function TeamPage() {
-  const { id = '' } = useParams()
+const ARSENAL = 'ARS'
+const DISPLAY_FONT = 'https://fonts.googleapis.com/css2?family=DM+Serif+Display&display=swap'
+
+/** Arsenal's page gets its own look: the tokens on <body> are swapped while it's open, plus a display face. */
+function useClubTheme(active: boolean) {
+  useEffect(() => {
+    if (!active) return
+    if (!document.querySelector(`link[href="${DISPLAY_FONT}"]`)) {
+      const link = document.createElement('link')
+      link.rel = 'stylesheet'
+      link.href = DISPLAY_FONT
+      document.head.appendChild(link)
+    }
+    document.body.classList.add('theme-arsenal')
+    return () => document.body.classList.remove('theme-arsenal')
+  }, [active])
+}
+
+/** /team/:id, or rendered by ArsenalPage with the id already resolved. */
+export default function TeamPage({ teamId }: { teamId?: string }) {
+  const routeParams = useParams()
+  const id = teamId ?? routeParams.id ?? ''
   const [params, setParams] = useSearchParams()
   const { data, error } = useApi(signal => api.team(id, signal), [id])
+  const isArsenal = data?.team.abbreviation === ARSENAL
+  useClubTheme(isArsenal)
 
   if (error) return <p className="error">Couldn't load this team: {error}</p>
   if (!data) return <p className="muted">Loading…</p>
@@ -64,25 +89,30 @@ export default function TeamPage() {
   const select = (t: Tab) => setParams(t === 'overview' ? {} : { tab: t }, { replace: true })
 
   return (
-    <section className="team-page">
-      <Link to="/table" className="back muted">← Table</Link>
-
-      <div className="team-head card">
-        <Crest team={team} size={72} />
-        <div className="team-name">
-          <h1>{team.name}</h1>
-          {venue && <span className="muted">{venue}</span>}
-        </div>
-        {standing && (
-          <div className="team-standing">
-            <div className="team-pos">
-              <strong>{ordinal(standing.position)}</strong>
-              <span className="muted">{standing.points} pts · {standing.played} played</span>
+    <section className={`team-page ${isArsenal ? 'club-page' : ''}`}>
+      {isArsenal ? (
+        <ClubHero team={team} venue={venue} standing={standing} results={results} />
+      ) : (
+        <>
+          <BackLink to="/table" label="Table" />
+          <div className="team-head card">
+            <Crest team={team} size={72} />
+            <div className="team-name">
+              <h1>{team.name}</h1>
+              {venue && <span className="muted">{venue}</span>}
             </div>
-            <FormStrip results={results.slice(-5)} />
+            {standing && (
+              <div className="team-standing">
+                <div className="team-pos">
+                  <strong>{ordinal(standing.position)}</strong>
+                  <span className="muted">{standing.points} pts · {standing.played} played</span>
+                </div>
+                <FormStrip results={results.slice(-5)} />
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
 
       <div className="tabs" role="tablist">
         {tabs.map(t => (
@@ -99,6 +129,36 @@ export default function TeamPage() {
       {tab === 'squad' && <SquadTab squad={squad} />}
       {tab === 'stats' && stats && <StatsTab team={team} stats={stats} results={results} table={table} />}
     </section>
+  )
+}
+
+/** Arsenal's header: a full-width red band with the crest, a display-face name and the season at a glance. */
+function ClubHero({ team, venue, standing, results }: {
+  team: Team; venue: string | null; standing: Standing | null; results: Played[]
+}) {
+  return (
+    <header className="club-hero">
+      <div className="club-hero-inner">
+        <Crest team={team} size={104} />
+        <div className="club-hero-name">
+          <p className="club-kicker">{venue ?? 'North London'}</p>
+          <h1>{team.name}</h1>
+        </div>
+        {standing && (
+          <dl className="club-hero-stats">
+            <div><dt>Position</dt><dd>{ordinal(standing.position)}</dd></div>
+            <div><dt>Points</dt><dd>{standing.points}</dd></div>
+            <div><dt>Played</dt><dd>{standing.played}</dd></div>
+          </dl>
+        )}
+      </div>
+      {results.length > 0 && (
+        <div className="club-hero-form">
+          <span>Form</span>
+          <FormStrip results={results.slice(-5)} />
+        </div>
+      )}
+    </header>
   )
 }
 
@@ -297,7 +357,7 @@ function MiniTable({ team, table }: { team: Team; table: Standing[] }) {
         {rows.map(s => (
           <Link
             key={s.team.id}
-            to={`/team/${s.team.id}`}
+            to={teamPath(s.team)}
             className={`tp-mini-row ${s.team.id === team.id ? 'me' : ''}`}
             aria-current={s.team.id === team.id ? 'page' : undefined}
           >
@@ -309,7 +369,10 @@ function MiniTable({ team, table }: { team: Team; table: Standing[] }) {
           </Link>
         ))}
       </div>
-      <Link to="/table" className="tp-more">Full table →</Link>
+      <Link to="/table" className="tp-more">
+        <span>View full table</span>
+        <ChevronRight size={16} />
+      </Link>
     </Card>
   )
 }

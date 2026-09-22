@@ -3,6 +3,8 @@ import MatchesPage from './pages/MatchesPage'
 import MatchPage from './pages/MatchPage'
 import TablePage from './pages/TablePage'
 import TeamPage from './pages/TeamPage'
+import ArsenalPage from './pages/ArsenalPage'
+import { ExternalLink } from './components/Icons'
 
 export default function App() {
   return (
@@ -14,9 +16,14 @@ export default function App() {
             Matches
           </NavLink>
           <NavLink to="/table">Table</NavLink>
+          <NavLink to="/arsenal" className="club-nav">
+            <span className="club-dot" aria-hidden="true" />
+            Arsenal
+          </NavLink>
         </nav>
         <a className="home-link" href="https://deanburgoyne.dev">
-          deanburgoyne.dev <span aria-hidden="true">↗</span>
+          <span>deanburgoyne.dev</span>
+          <ExternalLink size={14} />
         </a>
       </header>
       <main>
@@ -25,6 +32,7 @@ export default function App() {
           <Route path="/table" element={<TablePage />} />
           <Route path="/match/:id" element={<MatchPage />} />
           <Route path="/team/:id" element={<TeamPage />} />
+          <Route path="/arsenal" element={<ArsenalPage />} />
         </Routes>
       </main>
     </BrowserRouter>

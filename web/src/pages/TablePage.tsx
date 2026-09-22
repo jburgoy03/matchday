@@ -1,7 +1,8 @@
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { api } from '../api'
 import { useApi } from '../useApi'
 import { TeamBadge } from '../components/TeamBadge'
+import { teamPath } from '../teamPath'
 
 function zone(position: number) {
   if (position <= 4) return 'ucl'
@@ -11,6 +12,7 @@ function zone(position: number) {
 
 export default function TablePage() {
   const { data, error } = useApi(api.standings, [])
+  const navigate = useNavigate()
 
   if (error) return <p className="error">Couldn't load the table: {error}</p>
   if (!data) return <p className="muted">Loading…</p>
@@ -36,10 +38,18 @@ export default function TablePage() {
           </thead>
           <tbody>
             {data.map(r => (
-              <tr key={r.team.id} className={zone(r.position)}>
+              <tr
+                key={r.team.id}
+                className={`row-link ${zone(r.position) ?? ''}`}
+                onClick={e => {
+                  // The team name is a real link (keyboard and middle-click); the rest of the row follows it too.
+                  if ((e.target as HTMLElement).closest('a')) return
+                  navigate(teamPath(r.team))
+                }}
+              >
                 <td>{r.position}</td>
                 <td className="team-col">
-                  <Link to={`/team/${r.team.id}`} className="team-link">
+                  <Link to={teamPath(r.team)} className="team-link">
                     <TeamBadge team={r.team} />
                   </Link>
                 </td>

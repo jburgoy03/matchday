@@ -3,6 +3,8 @@ import { Link, useParams, useSearchParams } from 'react-router'
 import { api, type LineupPlayer, type Team, type TeamLineup } from '../api'
 import { useApi } from '../useApi'
 import { TeamBadge } from '../components/TeamBadge'
+import { BackLink } from '../components/BackLink'
+import { teamPath } from '../teamPath'
 import { MatchStats } from '../components/MatchStats'
 import { ICONS, Timeline } from '../components/Timeline'
 import { formatDay, formatTime, isLive, statusLabel } from '../format'
@@ -48,10 +50,10 @@ export default function MatchPage() {
 
   return (
     <section className="match">
-      <Link to="/" className="back muted">← Matches</Link>
+      <BackLink to="/" label="Matches" />
 
       <div className="scoreboard card">
-        <Link to={`/team/${m.home.id}`} className="side team-link">
+        <Link to={teamPath(m.home)} className="side team-link">
           {m.home.logoUrl && <img src={m.home.logoUrl} alt="" />}
           <span>{m.home.name}</span>
         </Link>
@@ -59,7 +61,7 @@ export default function MatchPage() {
           {m.homeScore ?? '–'} – {m.awayScore ?? '–'}
           <span className={`status ${live ? 'live' : ''}`}>{statusLabel(m)}</span>
         </div>
-        <Link to={`/team/${m.away.id}`} className="side team-link">
+        <Link to={teamPath(m.away)} className="side team-link">
           {m.away.logoUrl && <img src={m.away.logoUrl} alt="" />}
           <span>{m.away.name}</span>
         </Link>
@@ -100,7 +102,7 @@ function LineupCard({ team, lineup, marks }: { team: Team; lineup: TeamLineup | 
   return (
     <div className="lineup card">
       <div className="lineup-head">
-        <Link to={`/team/${team.id}`} className="team-link"><TeamBadge team={team} short /></Link>
+        <Link to={teamPath(team)} className="team-link"><TeamBadge team={team} short /></Link>
         <span className="muted">{lineup?.formation}</span>
       </div>
       {!lineup ? (
