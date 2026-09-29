@@ -48,6 +48,14 @@ export default function MatchesPage() {
   const { data: matches, error } = useApi(signal => api.matches(range, signal), [range.from, range.to, tick])
   const { data: table } = useApi(api.standings, [tick])
   const { data: leaders } = useApi(signal => api.leaders(5, signal), [tick])
+  // Filtering by team switches the list to that club's whole season, not just the date window.
+  const { data: teamSeason } = useApi(
+    signal => (teamId ? api.team(String(teamId), signal) : Promise.resolve(null)),
+    [teamId, tick],
+  )
+
+  const source = teamId ? teamSeason?.matches : matches
+  const loading = teamId ? !teamSeason : !matches
 
   const anyLive = !!matches?.some(m => isLive(m.status))
   useEffect(() => {
@@ -74,8 +82,7 @@ export default function MatchesPage() {
 
   if (error) return <p className="error">Couldn't load matches: {error}</p>
 
-  const visible = (matches ?? []).filter(m => {
-    if (teamId && m.home.id !== teamId && m.away.id !== teamId) return false
+  const visible = (source ?? []).filter(m => {
     if (show === 'results') return FINISHED.has(m.status)
     if (show === 'fixtures') return !FINISHED.has(m.status)
     return true
@@ -117,6 +124,7 @@ export default function MatchesPage() {
             </div>
           </div>
 
+          {!teamId && (
           <div className="rail-group">
             <span className="rail-label">Week</span>
             <div className="rail-buttons">
@@ -133,6 +141,7 @@ export default function MatchesPage() {
               </button>
             </div>
           </div>
+          )}
 
           {table && table.length > 0 && (
             <div className="rail-group">
@@ -142,6 +151,16 @@ export default function MatchesPage() {
                 value={teamId}
                 onChange={id => set('team', id, 0)}
               />
+              {teamId > 0 && (
+                <>
+                  <p className="rail-note">Showing the whole season</p>
+                  <div className="rail-buttons">
+                    <button type="button" className="rail-btn" onClick={jumpToToday}>
+                      <span>Jump to next match</span>
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -149,7 +168,7 @@ export default function MatchesPage() {
         <div className="matches-main">
           <h1>Matches</h1>
 
-          {!matches ? (
+          {loading ? (
             <p className="muted">Loading…</p>
           ) : (
             <>
@@ -164,7 +183,9 @@ export default function MatchesPage() {
                     </div>
                   </section>
                 ))}
-                {days.length === 0 && <p className="muted">No matches in this range.</p>}
+                {days.length === 0 && (
+                  <p className="muted">{teamId ? 'No matches for this team yet.' : 'No matches in this range.'}</p>
+                )}
               </div>
             </>
           )}
