@@ -34,6 +34,17 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
     private DateOnly? _backfilledThrough;
     private bool _backfillMarkLoaded;
 
+    // Forward fill: the rest of the season beyond the fixture window, a few days per tick, so team
+    // pages and the matches page's team filter can list every remaining fixture. A finished pass is
+    // redone weekly, because far-off kickoffs move when TV picks land.
+    private const int ForwardFillDaysPerTick = 3;
+    private static readonly TimeSpan ForwardFillRefresh = TimeSpan.FromDays(7);
+    private const string ForwardFillKey = "season-forwardfill-through";
+    private const string ForwardFillDoneKey = "season-forwardfill-done-at";
+    private DateOnly? _forwardFilledThrough;
+    private DateTimeOffset? _forwardFillDoneAt;
+    private bool _forwardFillMarkLoaded;
+
     // Squads: every club's roster once a day. The last run is stored in SyncStates so deploys don't refetch.
     private const string SquadsKey = "squads-synced-at";
     private DateTimeOffset? _squadsSyncedAt;
@@ -87,6 +98,9 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
 
         // 2. Season backfill: earlier matches this season, a few days per tick until caught up.
         anyFinished |= await BackfillSeasonAsync(today, now, ct);
+
+        // 2b. Forward fill: the rest of the season's fixtures, past the window.
+        await ForwardFillSeasonAsync(today, now, ct);
 
         // 3. Match detail for anything live, about to start, recently finished, or never detail-synced.
         List<Candidate> candidates;
@@ -165,6 +179,59 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
             ? "Season backfill complete ({From} to {Until})"
             : "Season backfill synced {From} to {Until}", from, until);
         return anyFinished;
+    }
+
+    /// <summary>
+    /// Pulls scoreboards from the end of the fixture window to the end of the season,
+    /// ForwardFillDaysPerTick per call, so every remaining fixture is in the database rather than
+    /// only the next three weeks. Once it reaches the end of the season it waits ForwardFillRefresh
+    /// and walks it again, which is how rescheduled kickoffs get corrected.
+    /// </summary>
+    private async Task ForwardFillSeasonAsync(DateOnly today, DateTimeOffset now, CancellationToken ct)
+    {
+        if (!_forwardFillMarkLoaded)
+        {
+            _forwardFilledThrough = DateOnly.TryParseExact(await ReadStateAsync(ForwardFillKey, ct), "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var mark) ? mark : null;
+            _forwardFillDoneAt = DateTimeOffset.TryParse(await ReadStateAsync(ForwardFillDoneKey, ct),
+                CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at) ? at : null;
+            _forwardFillMarkLoaded = true;
+        }
+
+        var seasonEnd = Season.EndFor(today);
+        var start = today.AddDays(FixtureDaysAhead + 1); // the fixture window already covers everything before this
+        if (start > seasonEnd) return;
+
+        var through = _forwardFilledThrough;
+        if (through is { } reached && reached >= seasonEnd)
+        {
+            if (_forwardFillDoneAt is null)
+            {
+                await WriteStateAsync(ForwardFillDoneKey, now.ToString("O", CultureInfo.InvariantCulture), now, ct);
+                _forwardFillDoneAt = now;
+                log.LogInformation("Season forward fill complete (through {SeasonEnd})", seasonEnd);
+                return;
+            }
+            if (now - _forwardFillDoneAt.Value < ForwardFillRefresh) return;
+
+            through = null; // start again at the window edge
+            _forwardFillDoneAt = null;
+            await WriteStateAsync(ForwardFillDoneKey, string.Empty, now, ct);
+        }
+
+        var from = through is { } done && done >= start ? done.AddDays(1) : start;
+        var until = from.AddDays(ForwardFillDaysPerTick - 1);
+        if (until > seasonEnd) until = seasonEnd;
+
+        for (var d = from; d <= until; d = d.AddDays(1))
+        {
+            var day = d;
+            await WithSync(s => s.SyncDayAsync(day, ct));
+        }
+
+        await WriteStateAsync(ForwardFillKey, until.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), now, ct);
+        _forwardFilledThrough = until;
+        log.LogInformation("Season forward fill synced {From} to {Until}", from, until);
     }
 
     /// <summary>Refreshes every club in the table once per SquadInterval. A failure for one club doesn't stop the rest.</summary>
