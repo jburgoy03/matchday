@@ -6,6 +6,7 @@ import { isLive } from '../format'
 import { MatchRow } from '../components/MatchRow'
 import { MatchesSidebar } from '../components/MatchesSidebar'
 import { ChevronLeft, ChevronRight } from '../components/Icons'
+import { TeamFilter } from '../components/TeamFilter'
 
 type Show = 'all' | 'results' | 'fixtures'
 
@@ -135,18 +136,12 @@ export default function MatchesPage() {
 
           {table && table.length > 0 && (
             <div className="rail-group">
-              <label className="rail-label" htmlFor="team-filter">Team</label>
-              <select
-                id="team-filter"
-                className="rail-select"
-                value={teamId || ''}
-                onChange={e => set('team', e.target.value || 0, 0)}
-              >
-                <option value="">All teams</option>
-                {[...table].sort((a, b) => a.team.name.localeCompare(b.team.name)).map(s => (
-                  <option key={s.team.id} value={s.team.id}>{s.team.name}</option>
-                ))}
-              </select>
+              <span className="rail-label">Team</span>
+              <TeamFilter
+                teams={table.map(t => t.team)}
+                value={teamId}
+                onChange={id => set('team', id, 0)}
+              />
             </div>
           )}
         </div>

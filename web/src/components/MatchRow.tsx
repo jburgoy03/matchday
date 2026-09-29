@@ -2,6 +2,7 @@ import { Link } from 'react-router'
 import type { Goal, MatchListItem } from '../api'
 import { goalSides, halfTimeScore, type Side } from '../goals'
 import { isLive } from '../format'
+import { Crest } from './Crest'
 
 const ET = 'America/New_York'
 const timeFmt = new Intl.DateTimeFormat('en-US', { timeZone: ET, hour: 'numeric', minute: '2-digit' })
@@ -23,16 +24,6 @@ function scorerLine(goals: Goal[]): string {
   return order.map(name => `${name}\u00a0${minutes.get(name)!.join(', ')}`).join(', ')
 }
 
-function Crest({ team, size = 26 }: { team: MatchListItem['home']; size?: number }) {
-  return team.logoUrl ? (
-    <img className="crest" src={team.logoUrl} alt="" width={size} height={size} />
-  ) : (
-    <span className="crest crest-fallback" style={{ width: size, height: size, fontSize: Math.round(size * 0.33) }}>
-      {team.abbreviation}
-    </span>
-  )
-}
-
 export function MatchRow({ m }: { m: MatchListItem }) {
   const live = isLive(m.status)
   const finished = m.status === 'FullTime'
@@ -51,7 +42,7 @@ export function MatchRow({ m }: { m: MatchListItem }) {
 
       <span className="m-team home">
         <span>{m.home.shortName}</span>
-        <Crest team={m.home} />
+        <Crest team={m.home} size={26} />
       </span>
       {played ? (
         <>
@@ -67,7 +58,7 @@ export function MatchRow({ m }: { m: MatchListItem }) {
         </>
       )}
       <span className="m-team away">
-        <Crest team={m.away} />
+        <Crest team={m.away} size={26} />
         <span>{m.away.shortName}</span>
       </span>
 

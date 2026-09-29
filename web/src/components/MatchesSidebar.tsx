@@ -1,22 +1,13 @@
 import { Link } from 'react-router'
 import type { Leader, MatchListItem, Standing } from '../api'
 import { ChevronRight } from './Icons'
+import { Crest } from './Crest'
 import { teamPath } from '../teamPath'
 
 const ET = 'America/New_York'
 const whenFmt = new Intl.DateTimeFormat('en-US', {
   timeZone: ET, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
 })
-
-function Crest({ team, size = 20 }: { team: Standing['team']; size?: number }) {
-  return team.logoUrl ? (
-    <img className="crest" src={team.logoUrl} alt="" width={size} height={size} />
-  ) : (
-    <span className="crest crest-fallback" style={{ width: size, height: size, fontSize: Math.round(size * 0.33) }}>
-      {team.abbreviation}
-    </span>
-  )
-}
 
 /** Top of the table, plus Arsenal's row when they're outside it, so the snapshot always answers "where are we?". */
 function snapshot(table: Standing[]): Standing[] {
@@ -43,7 +34,7 @@ export function MatchesSidebar({ table, leaders, arsenalNext }: {
                 className={`side-row ${s.team.abbreviation === 'ARS' ? 'me' : ''}`}
               >
                 <span className="muted">{s.position}</span>
-                <span className="side-team"><Crest team={s.team} /><span>{s.team.shortName}</span></span>
+                <span className="side-team"><Crest team={s.team} size={20} /><span>{s.team.shortName}</span></span>
                 <span className="muted">{s.goalDifference > 0 ? `+${s.goalDifference}` : s.goalDifference}</span>
                 <strong>{s.points}</strong>
               </Link>

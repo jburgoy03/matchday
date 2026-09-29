@@ -6,6 +6,7 @@ import { isLive } from '../format'
 import { BackLink } from '../components/BackLink'
 import { ChevronRight } from '../components/Icons'
 import { teamPath } from '../teamPath'
+import { Crest } from '../components/Crest'
 
 type Tab = 'overview' | 'matches' | 'squad' | 'stats'
 type Result = 'W' | 'D' | 'L'
@@ -159,16 +160,6 @@ function ClubHero({ team, venue, standing, results }: {
         </div>
       )}
     </header>
-  )
-}
-
-function Crest({ team, size }: { team: Team; size: number }) {
-  return team.logoUrl ? (
-    <img className="crest" src={team.logoUrl} alt="" width={size} height={size} />
-  ) : (
-    <span className="crest crest-fallback" style={{ width: size, height: size, fontSize: Math.round(size * 0.34) }}>
-      {team.abbreviation}
-    </span>
   )
 }
 
