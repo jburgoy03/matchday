@@ -64,8 +64,9 @@ public static class Endpoints
         var todayEt = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(clock.GetUtcNow(), Eastern).DateTime);
         var start = from ?? todayEt.AddDays(-7);
         var end = to ?? todayEt.AddDays(21);
-        if (end < start || end.DayNumber - start.DayNumber > 62)
-            return Results.BadRequest("Date range must be between 0 and 62 days.");
+        // A full season is ~334 days; 400 leaves room without allowing an unbounded scan.
+        if (end < start || end.DayNumber - start.DayNumber > 400)
+            return Results.BadRequest("Date range must be between 0 and 400 days.");
 
         var fromUtc = StartOfEasternDayUtc(start);
         var toUtc = StartOfEasternDayUtc(end.AddDays(1));

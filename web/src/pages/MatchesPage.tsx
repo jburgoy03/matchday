@@ -5,7 +5,6 @@ import { useApi } from '../useApi'
 import { isLive } from '../format'
 import { MatchRow } from '../components/MatchRow'
 import { MatchesSidebar } from '../components/MatchesSidebar'
-import { ChevronLeft, ChevronRight } from '../components/Icons'
 import { TeamFilter } from '../components/TeamFilter'
 
 type Show = 'all' | 'results' | 'fixtures'
@@ -28,7 +27,15 @@ const dayLabel = (key: string, today: string) => {
   return dayFmt.format(new Date(`${key}T12:00:00Z`))
 }
 
+/** Season boundaries, matching Season.cs on the server: 1 August to the following 30 June. */
+const seasonStart = (today: string) => {
+  const [y, m] = today.split('-').map(Number)
+  return `${m >= 7 ? y : y - 1}-08-01`
+}
+const seasonEnd = (today: string) => `${Number(seasonStart(today).slice(0, 4)) + 1}-06-30`
+
 const FINISHED = new Set(['FullTime', 'Postponed', 'Cancelled'])
+const RECENT_DAYS = 7 // how far back the default view keeps results; older ones live under Results
 
 export default function MatchesPage() {
   const [params, setParams] = useSearchParams()
@@ -36,19 +43,16 @@ export default function MatchesPage() {
   const mainRef = useRef<HTMLDivElement>(null)
 
   const show = (params.get('show') ?? 'all') as Show
-  const offset = Number(params.get('week') ?? 0) || 0
   const teamId = Number(params.get('team') ?? 0) || 0
 
   const today = dayKey(new Date())
-  const range = useMemo(
-    () => ({ from: shiftKey(today, -7 + offset * 7), to: shiftKey(today, 21 + offset * 7) }),
-    [today, offset],
-  )
+  // The whole season in one request, so switching Show is instant and every fixture is present.
+  const range = useMemo(() => ({ from: seasonStart(today), to: seasonEnd(today) }), [today])
 
   const { data: matches, error } = useApi(signal => api.matches(range, signal), [range.from, range.to, tick])
   const { data: table } = useApi(api.standings, [tick])
   const { data: leaders } = useApi(signal => api.leaders(5, signal), [tick])
-  // Filtering by team switches the list to that club's whole season, not just the date window.
+  // Filtering by team switches the list to that club's season from the team endpoint.
   const { data: teamSeason } = useApi(
     signal => (teamId ? api.team(String(teamId), signal) : Promise.resolve(null)),
     [teamId, tick],
@@ -71,24 +75,22 @@ export default function MatchesPage() {
     setParams(next, { replace: true })
   }
 
-  const jumpToToday = () => {
-    if (offset !== 0) {
-      set('week', 0, 0)
-      return
-    }
+  const jumpToNext = () => {
     const target = mainRef.current?.querySelector('[data-upcoming="true"]') ?? mainRef.current?.lastElementChild
     target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   if (error) return <p className="error">Couldn't load matches: {error}</p>
 
+  const cutoff = shiftKey(today, -RECENT_DAYS)
   const visible = (source ?? []).filter(m => {
-    if (show === 'results') return FINISHED.has(m.status)
-    if (show === 'fixtures') return !FINISHED.has(m.status)
-    return true
+    const finished = FINISHED.has(m.status)
+    if (show === 'results') return finished
+    if (show === 'fixtures') return !finished
+    return !finished || dayKey(m.kickoffUtc) >= cutoff // "All" = the last week plus everything ahead
   })
 
-  // Group into Eastern days, keeping the API's kickoff order.
+  // Group into Eastern days, keeping the API's kickoff order. Results read newest first.
   const days: { key: string; matches: MatchListItem[] }[] = []
   for (const m of visible) {
     const key = dayKey(m.kickoffUtc)
@@ -96,6 +98,7 @@ export default function MatchesPage() {
     if (last?.key === key) last.matches.push(m)
     else days.push({ key, matches: [m] })
   }
+  if (show === 'results') days.reverse()
 
   const live = visible.filter(m => isLive(m.status))
   const todays = visible.filter(m => dayKey(m.kickoffUtc) === today)
@@ -122,26 +125,14 @@ export default function MatchesPage() {
                 </button>
               ))}
             </div>
+            {show !== 'results' && (
+              <div className="rail-buttons">
+                <button type="button" className="rail-btn" onClick={jumpToNext}>
+                  <span>Jump to next match</span>
+                </button>
+              </div>
+            )}
           </div>
-
-          {!teamId && (
-          <div className="rail-group">
-            <span className="rail-label">Week</span>
-            <div className="rail-buttons">
-              <button type="button" className="rail-btn" onClick={() => set('week', offset - 1, 0)}>
-                <ChevronLeft size={16} />
-                <span>Previous week</span>
-              </button>
-              <button type="button" className="rail-btn" onClick={() => set('week', offset + 1, 0)}>
-                <ChevronRight size={16} />
-                <span>Next week</span>
-              </button>
-              <button type="button" className="rail-btn" onClick={jumpToToday}>
-                <span>Jump to today</span>
-              </button>
-            </div>
-          </div>
-          )}
 
           {table && table.length > 0 && (
             <div className="rail-group">
@@ -151,16 +142,7 @@ export default function MatchesPage() {
                 value={teamId}
                 onChange={id => set('team', id, 0)}
               />
-              {teamId > 0 && (
-                <>
-                  <p className="rail-note">Showing the whole season</p>
-                  <div className="rail-buttons">
-                    <button type="button" className="rail-btn" onClick={jumpToToday}>
-                      <span>Jump to next match</span>
-                    </button>
-                  </div>
-                </>
-              )}
+              {teamId > 0 && <p className="rail-note">Showing the whole season</p>}
             </div>
           )}
         </div>
@@ -184,7 +166,7 @@ export default function MatchesPage() {
                   </section>
                 ))}
                 {days.length === 0 && (
-                  <p className="muted">{teamId ? 'No matches for this team yet.' : 'No matches in this range.'}</p>
+                  <p className="muted">{teamId ? 'No matches for this team yet.' : 'Nothing to show here yet.'}</p>
                 )}
               </div>
             </>
