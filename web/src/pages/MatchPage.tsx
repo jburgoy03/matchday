@@ -8,6 +8,7 @@ import { MatchStats } from '../components/MatchStats'
 import { Timeline } from '../components/Timeline'
 import { Lineups } from '../components/Lineups'
 import { playerEvents } from '../playerEvents'
+import { matchColourVars } from '../teamColours'
 import { formatDay, formatTime, isLive, statusLabel } from '../format'
 
 type Tab = 'timeline' | 'stats' | 'lineups'
@@ -46,7 +47,7 @@ export default function MatchPage() {
   const events = playerEvents(incidents)
 
   return (
-    <section className="match">
+    <section className="match team-coloured" style={matchColourVars(m.home, m.away)}>
       <BackLink to="/" label="Matches" />
 
       <div className="scoreboard card">

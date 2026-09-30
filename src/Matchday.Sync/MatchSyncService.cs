@@ -306,7 +306,9 @@ public sealed class MatchSyncService(
                 Name = r.Name,
                 ShortName = r.ShortName,
                 Abbreviation = r.Abbreviation,
-                LogoUrl = r.LogoUrl
+                LogoUrl = r.LogoUrl,
+                Color = r.Color,
+                AlternateColor = r.AlternateColor
             };
             db.Teams.Add(team);
         }
@@ -316,6 +318,9 @@ public sealed class MatchSyncService(
             team.ShortName = r.ShortName;
             team.Abbreviation = r.Abbreviation;
             team.LogoUrl = r.LogoUrl ?? team.LogoUrl;
+            // Standings carry no colours; only overwrite when the feed actually sent one.
+            team.Color = r.Color ?? team.Color;
+            team.AlternateColor = r.AlternateColor ?? team.AlternateColor;
         }
         return team;
     }

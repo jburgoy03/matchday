@@ -6,7 +6,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Matchday.Api;
 
-public sealed record TeamDto(int Id, string Name, string ShortName, string Abbreviation, string? LogoUrl);
+/// <summary>Color / AlternateColor as "#rrggbb", or null until the sync has seen the club on a scoreboard.</summary>
+public sealed record TeamDto(int Id, string Name, string ShortName, string Abbreviation, string? LogoUrl, string? Color, string? AlternateColor);
 
 /// <summary>A goal in the match list: enough to print "Haaland 12'" under the right team.</summary>
 public sealed record GoalDto(string Type, int? Minute, string Clock, int? TeamId, string? Player);
@@ -348,7 +349,8 @@ public static class Endpoints
         m.Id, m.KickoffUtc, m.Status.ToString(), m.ClockDisplay,
         ToTeam(m.HomeTeam), ToTeam(m.AwayTeam), m.HomeScore, m.AwayScore, m.Venue, goals);
 
-    private static TeamDto ToTeam(Team t) => new(t.Id, t.Name, t.ShortName, t.Abbreviation, t.LogoUrl);
+    private static TeamDto ToTeam(Team t) => new(t.Id, t.Name, t.ShortName, t.Abbreviation, t.LogoUrl,
+        t.Color is null ? null : $"#{t.Color}", t.AlternateColor is null ? null : $"#{t.AlternateColor}");
 
     private static DateTimeOffset StartOfEasternDayUtc(DateOnly day)
     {

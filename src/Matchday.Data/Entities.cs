@@ -10,6 +10,9 @@ public class Team
     public required string ShortName { get; set; }
     public required string Abbreviation { get; set; }
     public string? LogoUrl { get; set; }
+    /// <summary>Club colour from the provider: six lowercase hex digits, no '#'.</summary>
+    public string? Color { get; set; }
+    public string? AlternateColor { get; set; }
 }
 
 public class Player

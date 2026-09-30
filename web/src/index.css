@@ -941,3 +941,17 @@ body.theme-arsenal .site-header { background: var(--surface); }
   .shirt-marks .mk-full { display: none; }
   .shirt-marks .mk-compact { display: inline; }
 }
+
+/* ---------- Match page: club colours ----------
+   teamColours.ts sets --home-l / --home-d (and away, and inks) inline on the match page,
+   already checked for contrast against each theme's surface and for a home/away clash. */
+.team-coloured {
+  --home: var(--home-l); --away: var(--away-l);
+  --home-ink: var(--home-ink-l); --away-ink: var(--away-ink-l);
+}
+@media (prefers-color-scheme: dark) {
+  .team-coloured {
+    --home: var(--home-d); --away: var(--away-d);
+    --home-ink: var(--home-ink-d); --away-ink: var(--away-ink-d);
+  }
+}

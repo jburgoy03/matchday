@@ -145,12 +145,23 @@ public static partial class EspnMapper
         _ => MatchStatus.Unknown
     };
 
+    // The scoreboard and summary team objects carry color / alternateColor; standings don't, so
+    // those come through as null and the sync keeps whatever it already has.
     private static TeamRef MapTeam(JsonElement t) => new(
         t.Str("id") ?? "",
         t.Str("displayName") ?? t.Str("name") ?? "",
         t.Str("shortDisplayName") ?? t.Str("displayName") ?? "",
         t.Str("abbreviation") ?? "",
-        t.Str("logo") ?? t.Arr("logos").Select(l => l.Str("href")).FirstOrDefault());
+        t.Str("logo") ?? t.Arr("logos").Select(l => l.Str("href")).FirstOrDefault(),
+        Hex(t.Str("color")),
+        Hex(t.Str("alternateColor")));
+
+    /// <summary>"99C5EA" or "#99c5ea" → "99c5ea"; anything else → null.</summary>
+    internal static string? Hex(string? value)
+    {
+        var v = value?.Trim().TrimStart('#').ToLowerInvariant();
+        return v is { Length: 6 } && v.All(Uri.IsHexDigit) ? v : null;
+    }
 
     private static TeamLineup MapLineup(JsonElement r) => new(
         r.Str("team", "id") ?? "",

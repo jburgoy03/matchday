@@ -4,12 +4,15 @@ public enum MatchStatus { Scheduled, Live, HalfTime, FullTime, Postponed, Cancel
 
 public enum MatchEventType { Goal, PenaltyGoal, OwnGoal, YellowCard, RedCard, Substitution, Other }
 
+/// <summary>Color / AlternateColor are six lowercase hex digits without '#', or null when the feed doesn't say.</summary>
 public sealed record TeamRef(
     string ProviderId,
     string Name,
     string ShortName,
     string Abbreviation,
-    string? LogoUrl);
+    string? LogoUrl,
+    string? Color = null,
+    string? AlternateColor = null);
 
 public sealed record PlayerRef(
     string ProviderId,

@@ -4,6 +4,9 @@ export interface Team {
   shortName: string
   abbreviation: string
   logoUrl: string | null
+  /** Club colours as "#rrggbb"; null until the sync has seen the club on a scoreboard. */
+  color: string | null
+  alternateColor: string | null
 }
 
 export type MatchStatus = 'Scheduled' | 'Live' | 'HalfTime' | 'FullTime' | 'Postponed' | 'Cancelled' | 'Unknown'
