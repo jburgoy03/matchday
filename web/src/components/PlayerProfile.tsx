@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { api, type CareerClub, type PlayerProfile as Profile } from '../api'
+import { api, type CareerClub, type PlayerSeason } from '../api'
 import { useApi } from '../useApi'
 import { inkOn } from '../teamColours'
 
@@ -36,6 +36,12 @@ export const useOpenPlayer = () => useContext(Ctx)
 
 const POSITION: Record<string, string> = { G: 'Goalkeeper', D: 'Defender', M: 'Midfielder', F: 'Forward' }
 
+/** Start year of the current season (1 August onwards), matching Season.cs on the server. */
+function currentSeasonYear(): number {
+  const now = new Date()
+  return now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1
+}
+
 function PlayerDialog({ playerId, onClose }: { playerId: number; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null)
   const { data: p, error } = useApi(signal => api.player(playerId, signal), [playerId])
@@ -48,6 +54,8 @@ function PlayerDialog({ playerId, onClose }: { playerId: number; onClose: () => 
   }, [])
 
   const colour = p?.team?.color ?? null
+  const sub = p ? [p.team?.name, POSITION[p.position ?? '']].filter(Boolean).join(' · ') : ''
+  const meta = p ? [p.age, p.nationality].filter(v => v != null && v !== '').join(' · ') : ''
   return (
     <dialog
       ref={ref}
@@ -70,14 +78,12 @@ function PlayerDialog({ playerId, onClose }: { playerId: number; onClose: () => 
           )}
           <div className="pp-title">
             <h2>{p?.name ?? (error ? 'Player' : 'Loading…')}</h2>
-            {p && (
-              <>
-                <span className="pp-sub">{[p.team?.name, POSITION[p.position ?? '']].filter(Boolean).join(' · ')}</span>
-                <span className="pp-meta">
-                  {p.flagUrl && <img src={p.flagUrl} alt="" width={18} height={12} />}
-                  {[p.age, p.nationality].filter(v => v != null && v !== '').join(' · ')}
-                </span>
-              </>
+            {sub && <span className="pp-sub">{sub}</span>}
+            {(meta || p?.flagUrl) && (
+              <span className="pp-meta">
+                {p?.flagUrl && <img src={p.flagUrl} alt="" width={18} height={12} />}
+                {meta}
+              </span>
             )}
           </div>
           <button type="button" className="pp-close" aria-label="Close" onClick={() => ref.current?.close()}>
@@ -88,7 +94,8 @@ function PlayerDialog({ playerId, onClose }: { playerId: number; onClose: () => 
         </div>
 
         {error && <p className="muted">Couldn't load this player: {error}</p>}
-        {p && <ThisSeason p={p} />}
+        {/* Only for Premier League players; the API sends no season for anyone else. */}
+        {p?.season && <ThisSeason s={p.season} />}
 
         <section className="pp-section">
           <h3>Career</h3>
@@ -99,7 +106,7 @@ function PlayerDialog({ playerId, onClose }: { playerId: number; onClose: () => 
           ) : career.clubs.length === 0 ? (
             <p className="muted pp-note">No career history from ESPN for this player.</p>
           ) : (
-            <Career clubs={career.clubs} currentYear={p ? Number(p.season.label.slice(0, 4)) : null} />
+            <Career clubs={career.clubs} currentYear={currentSeasonYear()} />
           )}
         </section>
       </div>
@@ -107,8 +114,7 @@ function PlayerDialog({ playerId, onClose }: { playerId: number; onClose: () => 
   )
 }
 
-function ThisSeason({ p }: { p: Profile }) {
-  const s = p.season
+function ThisSeason({ s }: { s: PlayerSeason }) {
   const tiles: [string, number][] = [
     ['Apps', s.apps],
     ['Starts', s.starts],
@@ -143,7 +149,7 @@ function span(c: CareerClub): string | null {
 
 const swatch = (c: CareerClub) => (c.color ? `#${c.color}` : 'var(--muted)')
 
-function Career({ clubs, currentYear }: { clubs: CareerClub[]; currentYear: number | null }) {
+function Career({ clubs, currentYear }: { clubs: CareerClub[]; currentYear: number }) {
   const rows = clubs
     .flatMap(c => c.seasons.map(s => ({ ...s, club: c })))
     .sort((a, b) => b.year - a.year)

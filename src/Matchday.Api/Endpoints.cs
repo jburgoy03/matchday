@@ -41,10 +41,13 @@ public sealed record CleanSheetDto(int PlayerId, string Name, TeamDto? Team, int
 /// <summary>A player's league numbers this season, from our own match data. CleanSheets only for keepers.</summary>
 public sealed record PlayerSeasonDto(string Label, int Apps, int Starts, int Goals, int Assists, int YellowCards, int RedCards, int? CleanSheets);
 
-/// <summary>The player profile popup. Position is G, D, M or F. Career comes separately from /players/{id}/career.</summary>
+/// <summary>
+/// The player profile popup. Position is G, D, M or F. Career comes separately from /players/{id}/career.
+/// Season is null for a player outside the Premier League (not in a league squad, no league appearance this season).
+/// </summary>
 public sealed record PlayerDto(
     int Id, string Name, TeamDto? Team, string? Jersey, string? Position, int? Age, string? Nationality, string? FlagUrl,
-    PlayerSeasonDto Season);
+    PlayerSeasonDto? Season);
 
 /// <summary>The season's leaderboards in one response, for the matches page sidebar.</summary>
 public sealed record LeaderboardsDto(IReadOnlyList<LeaderDto> Scorers, IReadOnlyList<LeaderDto> Assists, IReadOnlyList<CleanSheetDto> CleanSheets);
@@ -499,8 +502,23 @@ public static class Endpoints
             })
             : null;
 
-        // Club and shirt: the current squad if he's in one, otherwise his latest match.
-        var latest = lineups.OrderByDescending(l => finished[l.MatchId].KickoffUtc).FirstOrDefault();
+        // A Premier League player is in a league squad or has played in the league this season.
+        // Anyone else (a Champions League opponent, say) gets no league season block.
+        var inLeague = member is not null || lineups.Count > 0;
+
+        // Club and shirt: the current squad if he's in one, otherwise his latest league match, otherwise
+        // his latest match in any competition (how a European club's player gets a club and shirt number).
+        var latestLeague = lineups.OrderByDescending(l => finished[l.MatchId].KickoffUtc).FirstOrDefault();
+        var latest = latestLeague is not null
+            ? new { latestLeague.TeamId, latestLeague.Jersey, latestLeague.Position }
+            : member is null
+                ? await (from l in db.LineupEntries.AsNoTracking()
+                         join m in db.Matches.AsNoTracking() on l.MatchId equals m.Id
+                         where l.PlayerId == id
+                         orderby m.KickoffUtc descending
+                         select new { l.TeamId, l.Jersey, l.Position })
+                    .FirstOrDefaultAsync(ct)
+                : null;
         var teamId = member?.TeamId ?? latest?.TeamId;
         var team = teamId is null ? null : await db.Teams.AsNoTracking().FirstOrDefaultAsync(t => t.Id == teamId, ct);
 
@@ -510,7 +528,7 @@ public static class Endpoints
             member?.Jersey ?? latest?.Jersey,
             member?.Position ?? PositionGroup(latest?.Position),
             member?.Age, member?.Nationality, member?.FlagUrl,
-            new PlayerSeasonDto(
+            !inLeague ? null : new PlayerSeasonDto(
                 $"{y}-{(y + 1) % 100:D2}",
                 started.Concat(cameOn).Distinct().Count(),
                 started.Count,

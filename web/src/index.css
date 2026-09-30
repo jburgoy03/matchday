@@ -1066,7 +1066,8 @@ button.shirt:focus-visible { outline: 2px solid #fff; outline-offset: 3px; borde
 .pp-section h3, .pp-table-h {
   margin: 0; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
 }
-.pp-table-h { margin-top: 12px; }
+/* Needs .pp-section in front: the shared heading rule above sets margin: 0 and would win. */
+.pp-section .pp-table-h { margin-top: 16px; }
 .pp-note { margin: 0; font-size: 0.78rem; }
 .pp-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
 .pp-tile {
@@ -1075,16 +1076,20 @@ button.shirt:focus-visible { outline: 2px solid #fff; outline-offset: 3px; borde
 }
 .pp-tile strong { font-size: 1.75rem; line-height: 1; font-variant-numeric: tabular-nums; }
 .pp-tile span { font-size: 0.75rem; color: var(--muted); }
-.pp-clubs { list-style: none; margin: 0; padding: 0; display: flex; gap: 8px; }
+/* Club cards wrap onto more rows rather than squeezing: a long career used to crush seven cards into one row. */
+.pp-clubs {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px;
+}
 .pp-clubs li {
-  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 8px;
+  min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--muted) 40%, var(--border));
   background: color-mix(in srgb, var(--text) 5%, var(--surface));
 }
 .pp-clubs li.none { background: transparent; border-color: var(--border); }
 .pp-clubs li.none .pp-club-name { color: var(--muted); }
 .pp-club-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-weight: 600; font-size: 0.85rem; }
-.pp-clubs .pp-club-name { align-items: flex-start; line-height: 1.3; }
+.pp-clubs .pp-club-name { align-items: flex-start; line-height: 1.3; overflow-wrap: anywhere; }
 .pp-clubs .pp-swatch { margin-top: 0.35em; }
 .pp-club-years { font-size: 0.75rem; color: var(--muted); }
 .pp-swatch { flex-shrink: 0; width: 8px; height: 8px; border-radius: 2px; }
@@ -1115,8 +1120,7 @@ button.shirt:focus-visible { outline: 2px solid #fff; outline-offset: 3px; borde
   .pp-title h2 { font-size: 1.3rem; }
   .pp-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .pp-tile strong { font-size: 1.5rem; }
-  .pp-clubs { flex-wrap: wrap; }
-  .pp-clubs li { flex: 1 1 40%; }
+  .pp-clubs { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
   .pp-table { font-size: 0.84rem; }
   .pp-table th, .pp-table td { padding-inline: 5px; }
   .pp-table .num { width: 2.6rem; }

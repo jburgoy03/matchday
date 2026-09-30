@@ -183,7 +183,8 @@ export interface PlayerProfile {
   age: number | null
   nationality: string | null
   flagUrl: string | null
-  season: PlayerSeason
+  /** This season in the Premier League; null for a player outside it (e.g. a Champions League opponent). */
+  season: PlayerSeason | null
 }
 
 /** League stats for one season at one club, from ESPN. year = the season's start year. */
