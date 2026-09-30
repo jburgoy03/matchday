@@ -374,15 +374,21 @@ public static class Endpoints
             .ToList());
     }
 
-    /// <summary>Top scorers, top assists and most clean sheets this season.</summary>
-    private static async Task<IResult> GetLeaderboards(MatchdayDbContext db, TimeProvider clock, int? top, CancellationToken ct)
+    /// <summary>
+    /// Top scorers, top assists and most clean sheets this season in one competition:
+    /// the Premier League by default, or any followed competition (?competition=uefa.champions).
+    /// </summary>
+    private static async Task<IResult> GetLeaderboards(MatchdayDbContext db, TimeProvider clock, int? top, string? competition, CancellationToken ct)
     {
+        var comp = string.IsNullOrWhiteSpace(competition) ? Competitions.PremierLeague : competition;
+        if (!Competitions.IsFollowed(comp)) return Results.BadRequest($"Unknown competition '{comp}'.");
+
         var todayEt = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(clock.GetUtcNow(), Eastern).DateTime);
         var seasonStartUtc = StartOfEasternDayUtc(Season.StartFor(todayEt));
         var limit = Math.Clamp(top ?? 5, 1, 50);
 
         var events = await db.Incidents.AsNoTracking()
-            .Where(i => db.Matches.Any(m => m.Id == i.MatchId && m.KickoffUtc >= seasonStartUtc && m.Competition == Competitions.PremierLeague))
+            .Where(i => db.Matches.Any(m => m.Id == i.MatchId && m.KickoffUtc >= seasonStartUtc && m.Competition == comp))
             .Select(i => new { i.MatchId, i.Type, i.PrimaryPlayerId, i.SecondaryPlayerId, i.TeamId })
             .ToListAsync(ct);
 
@@ -402,7 +408,7 @@ public static class Endpoints
 
         // Clean sheets: the starting keeper in a finished match, opponents on zero, not substituted.
         var finished = await db.Matches.AsNoTracking()
-            .Where(m => m.KickoffUtc >= seasonStartUtc && m.Status == MatchStatus.FullTime && m.Competition == Competitions.PremierLeague)
+            .Where(m => m.KickoffUtc >= seasonStartUtc && m.Status == MatchStatus.FullTime && m.Competition == comp)
             .Select(m => new { m.Id, m.HomeTeamId, m.HomeScore, m.AwayScore })
             .ToDictionaryAsync(m => m.Id, ct);
         var finishedIds = finished.Keys.ToList();

@@ -5,6 +5,7 @@ import { ChevronRight } from './Icons'
 import { Crest } from './Crest'
 import { teamPath } from '../teamPath'
 import { useOpenPlayer } from './PlayerProfile'
+import { competitionName, PREMIER_LEAGUE } from '../competitions'
 
 const ET = 'America/New_York'
 const whenFmt = new Intl.DateTimeFormat('en-US', {
@@ -36,7 +37,7 @@ const BOARD_TABS: { key: BoardKey; label: string }[] = [
  * Scorers, assists and clean sheets in one card behind tabs — three separate cards made the
  * sticky column taller than the screen, so the bottom of it was unreachable until the page ended.
  */
-function Leaders({ boards }: { boards: Leaderboards }) {
+function Leaders({ boards, competition }: { boards: Leaderboards; competition: string }) {
   const [tab, setTab] = useState<BoardKey>('goals')
   const open = useOpenPlayer()
   const rows: Record<BoardKey, BoardRow[]> = {
@@ -49,7 +50,7 @@ function Leaders({ boards }: { boards: Leaderboards }) {
 
   return (
     <div className="side-card card">
-      <h2>Season leaders</h2>
+      <h2>Season leaders{competition === PREMIER_LEAGUE ? '' : ` · ${competitionName(competition)}`}</h2>
       <div className="segmented" role="group" aria-label="Leaderboard">
         {BOARD_TABS.map(t => (
           <button key={t.key} type="button" aria-pressed={tab === t.key} onClick={() => setTab(t.key)}>
@@ -75,7 +76,12 @@ function Leaders({ boards }: { boards: Leaderboards }) {
   )
 }
 
-export function MatchesSidebar({ table, boards, arsenalNext }: {
+/** The full table page for a competition; the Premier League is the page's default. */
+const tablePath = (competition: string) => (competition === PREMIER_LEAGUE ? '/table' : `/table?comp=${competition}`)
+
+/** Table and leaders follow the matches page's competition; "Arsenal next" is across every competition. */
+export function MatchesSidebar({ competition, table, boards, arsenalNext }: {
+  competition: string
   table: Standing[] | null
   boards: Leaderboards | null
   arsenalNext: MatchListItem | null
@@ -84,7 +90,7 @@ export function MatchesSidebar({ table, boards, arsenalNext }: {
     <aside className="matches-side">
       {table && table.length > 0 && (
         <div className="side-card card">
-          <h2>Table</h2>
+          <h2>{competition === PREMIER_LEAGUE ? 'Table' : competitionName(competition)}</h2>
           <div className="side-table">
             {snapshot(table).map(s => (
               <Link
@@ -99,14 +105,14 @@ export function MatchesSidebar({ table, boards, arsenalNext }: {
               </Link>
             ))}
           </div>
-          <Link to="/table" className="tp-more">
+          <Link to={tablePath(competition)} className="tp-more">
             <span>View full table</span>
             <ChevronRight size={16} />
           </Link>
         </div>
       )}
 
-      {boards && <Leaders boards={boards} />}
+      {boards && <Leaders key={competition} boards={boards} competition={competition} />}
 
       {arsenalNext && (
         <div className="side-card card">

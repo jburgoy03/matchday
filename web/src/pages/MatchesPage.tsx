@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { api, type MatchListItem } from '../api'
+import { api, type MatchListItem, type Team } from '../api'
 import { useApi } from '../useApi'
 import { isLive } from '../format'
 import { MatchRow } from '../components/MatchRow'
 import { MatchesSidebar } from '../components/MatchesSidebar'
 import { TeamFilter } from '../components/TeamFilter'
-import { COMPETITION_ORDER, CompetitionPicker, PREMIER_LEAGUE } from '../competitions'
+import { COMPETITION_ORDER, CompetitionPicker, PREMIER_LEAGUE, WITH_TABLES } from '../competitions'
 
 type Show = 'results' | 'fixtures'
 
@@ -50,8 +50,6 @@ export default function MatchesPage() {
   const range = useMemo(() => ({ from: seasonStart(today), to: seasonEnd(today) }), [today])
 
   const { data: matches, error } = useApi(signal => api.matches(range, signal), [range.from, range.to, tick])
-  const { data: table } = useApi(api.standings, [tick])
-  const { data: boards } = useApi(signal => api.leaderboards(5, signal), [tick])
   // Filtering by team switches the list to that club's season from the team endpoint.
   const { data: teamSeason } = useApi(
     signal => (teamId ? api.team(String(teamId), signal) : Promise.resolve(null)),
@@ -60,6 +58,28 @@ export default function MatchesPage() {
 
   const source = teamId ? teamSeason?.matches : matches
   const loading = teamId ? !teamSeason : !matches
+
+  // Competitions that have matches in what's loaded, in the usual order; the Premier League is always offered.
+  const present = COMPETITION_ORDER.filter(c => c === PREMIER_LEAGUE || (source ?? []).some(m => m.competition === c))
+  const requestedComp = params.get('comp') ?? PREMIER_LEAGUE
+  // Until the list arrives, trust the URL so the sidebar starts loading the right competition straight away.
+  const comp = source
+    ? (present.includes(requestedComp) ? requestedComp : PREMIER_LEAGUE)
+    : (COMPETITION_ORDER.includes(requestedComp) ? requestedComp : PREMIER_LEAGUE)
+  const hasTable = WITH_TABLES.includes(comp)
+
+  // The sidebar follows the picked competition. Each result is tagged with the competition it was
+  // loaded for, so the previous competition's table never shows under the new one while it loads.
+  const { data: tableFor } = useApi(
+    async signal => ({ comp, rows: hasTable ? await api.standings(signal, comp) : [] }),
+    [comp, tick],
+  )
+  const { data: boardsFor } = useApi(
+    async signal => ({ comp, boards: await api.leaderboards(5, signal, comp) }),
+    [comp, tick],
+  )
+  const table = tableFor?.comp === comp ? tableFor.rows : null
+  const boards = boardsFor?.comp === comp ? boardsFor.boards : null
 
   const anyLive = !!matches?.some(m => isLive(m.status))
   useEffect(() => {
@@ -77,10 +97,18 @@ export default function MatchesPage() {
 
   if (error) return <p className="error">Couldn't load matches: {error}</p>
 
-  // Competitions that have matches in what's loaded, in the usual order; the Premier League is always offered.
-  const present = COMPETITION_ORDER.filter(c => c === PREMIER_LEAGUE || (source ?? []).some(m => m.competition === c))
-  const requestedComp = params.get('comp') ?? PREMIER_LEAGUE
-  const comp = present.includes(requestedComp) ? requestedComp : PREMIER_LEAGUE
+  // Clubs in this competition: its table (when it has one) plus anyone with a match in it this season,
+  // so a cup's lower-league sides and a knockout-only club are pickable too.
+  const compTeams = new Map<number, Team>()
+  for (const s of table ?? []) compTeams.set(s.team.id, s.team)
+  for (const m of matches ?? []) {
+    if (m.competition !== comp) continue
+    if (!compTeams.has(m.home.id)) compTeams.set(m.home.id, m.home)
+    if (!compTeams.has(m.away.id)) compTeams.set(m.away.id, m.away)
+  }
+  // Keep the picked club in the list even if the URL pairs it with another competition.
+  if (teamSeason && !compTeams.has(teamSeason.team.id)) compTeams.set(teamSeason.team.id, teamSeason.team)
+  const teams = [...compTeams.values()]
 
   const visible = (source ?? []).filter(m => {
     if (m.competition !== comp) return false
@@ -131,11 +159,11 @@ export default function MatchesPage() {
             </div>
           </div>
 
-          {table && table.length > 0 && (
+          {teams.length > 0 && (
             <div className="rail-group">
               <span className="rail-label">Team</span>
               <TeamFilter
-                teams={table.map(t => t.team)}
+                teams={teams}
                 value={teamId}
                 onChange={id => set('team', id, 0)}
               />
@@ -170,7 +198,7 @@ export default function MatchesPage() {
           )}
         </div>
 
-        <MatchesSidebar table={table ?? null} boards={boards ?? null} arsenalNext={arsenalNext} />
+        <MatchesSidebar competition={comp} table={table} boards={boards} arsenalNext={arsenalNext} />
       </div>
     </section>
   )

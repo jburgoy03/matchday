@@ -1,9 +1,9 @@
 namespace Matchday.Core;
 
 /// <summary>
-/// The competitions the site follows, by the provider's league slug. The Premier League drives the
-/// table, leaders and season stats; the others only add matches (for Premier League clubs) to the
-/// match lists and team pages. Friendlies and anything not listed here are ignored.
+/// The competitions the site follows, by the provider's league slug. Every one has its own matches
+/// and season leaders on the matches page; the ones in <see cref="WithTables"/> also have a table.
+/// Squad and team season stats stay Premier League only. Friendlies and anything not listed here are ignored.
 /// </summary>
 public static class Competitions
 {
