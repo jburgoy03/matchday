@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { api, type CareerClub, type PlayerSeason } from '../api'
 import { useApi } from '../useApi'
 import { inkOn } from '../teamColours'
@@ -52,6 +52,7 @@ function PlayerDialog({ playerId, onClose }: { playerId: number; onClose: () => 
     const d = ref.current
     if (d && !d.open) d.showModal()
   }, [])
+  useSwipeToClose(ref)
 
   const colour = p?.team?.color ?? null
   const sub = p ? [p.team?.name, POSITION[p.position ?? '']].filter(Boolean).join(' · ') : ''
@@ -112,6 +113,86 @@ function PlayerDialog({ playerId, onClose }: { playerId: number; onClose: () => 
       </div>
     </dialog>
   )
+}
+
+/** Same breakpoint as the bottom-sheet CSS in index.css. */
+const SHEET_QUERY = '(max-width: 640px)'
+
+/**
+ * Phones: drag the bottom sheet down to close it. The drag only starts when the sheet is scrolled
+ * to the top and the finger moves down; anything else stays a normal scroll. On release it closes
+ * when dragged past a quarter of its height (at most 140px) or flicked down fast; otherwise it
+ * springs back.
+ */
+function useSwipeToClose(ref: RefObject<HTMLDialogElement | null>) {
+  useEffect(() => {
+    const d = ref.current
+    if (!d) return
+    const phone = window.matchMedia(SHEET_QUERY)
+    let tracking = false
+    let dragging = false
+    let startY = 0
+    let dy = 0
+    let lastY = 0
+    let lastT = 0
+    let speed = 0 // px per ms, downwards, over the last move
+
+    const onStart = (e: TouchEvent) => {
+      if (!phone.matches || e.touches.length !== 1 || d.scrollTop > 0) return
+      tracking = true
+      dragging = false
+      startY = lastY = e.touches[0].clientY
+      lastT = e.timeStamp
+      dy = speed = 0
+    }
+
+    const onMove = (e: TouchEvent) => {
+      if (!tracking) return
+      const y = e.touches[0].clientY
+      const moved = y - startY
+      if (!dragging) {
+        if (moved < -6) { tracking = false; return } // going up: let it scroll
+        if (moved < 6) return // too small to call yet
+        dragging = true
+        d.style.transition = 'none'
+      }
+      e.preventDefault() // stop the page (and iOS rubber-banding) scrolling under the drag
+      dy = Math.max(0, moved)
+      const dt = e.timeStamp - lastT
+      if (dt > 0) speed = (y - lastY) / dt
+      lastY = y
+      lastT = e.timeStamp
+      d.style.transform = `translateY(${dy}px)`
+    }
+
+    const onEnd = () => {
+      if (!tracking) return
+      tracking = false
+      if (!dragging) return
+      dragging = false
+      d.style.transition = 'transform 200ms ease'
+      if (dy > Math.min(140, d.offsetHeight * 0.25) || speed > 0.5) {
+        d.style.transform = `translateY(${d.offsetHeight}px)`
+        let done = false
+        const close = () => { if (!done) { done = true; if (d.open) d.close() } }
+        d.addEventListener('transitionend', close, { once: true })
+        window.setTimeout(close, 260) // in case transitionend never fires
+      } else {
+        d.style.transform = ''
+      }
+    }
+
+    d.addEventListener('touchstart', onStart, { passive: true })
+    d.addEventListener('touchmove', onMove, { passive: false })
+    d.addEventListener('touchend', onEnd)
+    d.addEventListener('touchcancel', onEnd)
+    return () => {
+      d.removeEventListener('touchstart', onStart)
+      d.removeEventListener('touchmove', onMove)
+      d.removeEventListener('touchend', onEnd)
+      d.removeEventListener('touchcancel', onEnd)
+    }
+  }, [ref])
 }
 
 function ThisSeason({ s }: { s: PlayerSeason }) {

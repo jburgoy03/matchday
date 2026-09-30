@@ -59,6 +59,9 @@ const CODES: Record<string, { depth: number; role: string }> = {
   'AM-L': { depth: 4, role: 'Attacking midfield' },
   RW: { depth: 5, role: 'Right wing' },
   LW: { depth: 5, role: 'Left wing' },
+  // The wide forwards of a 4-3-3 (PSG, Bodø/Glimt). Missing these used to hide the whole pitch.
+  RF: { depth: 5, role: 'Right forward' },
+  LF: { depth: 5, role: 'Left forward' },
   F: { depth: 5, role: 'Forward' },
   CF: { depth: 5, role: 'Striker' },
   'CF-R': { depth: 5, role: 'Striker' },
@@ -66,14 +69,37 @@ const CODES: Record<string, { depth: number; role: string }> = {
   ST: { depth: 5, role: 'Striker' },
 }
 
-/** -1 left, 0 centre, 1 right — from the team's own point of view. */
+/**
+ * Left-to-right order within a line, from the team's own point of view: wide positions (RB, LM, RF…)
+ * are ±2, the inside ones (CD-R, CM-L…) ±1, central 0. Two levels, so a left back never lands
+ * inside the left centre-back.
+ */
 function sideOf(code: string): number {
-  if (code.endsWith('-R') || (code.startsWith('R') && code !== 'R')) return 1
-  if (code.endsWith('-L') || (code.startsWith('L') && code !== 'L')) return -1
+  if (code.startsWith('R') && code !== 'R') return 2
+  if (code.startsWith('L') && code !== 'L') return -2
+  if (code.endsWith('-R')) return 1
+  if (code.endsWith('-L')) return -1
   return 0
 }
 
-export const roleOf = (p: LineupPlayer) => CODES[p.position ?? '']?.role ?? p.position ?? ''
+/**
+ * A position code's band and role. Codes not in CODES are guessed from their letters (a "-R"/"-L"
+ * suffix dropped, then the last letter: F/W/S forward, M midfield, B/D defence), so one code ESPN
+ * hasn't used before doesn't hide the pitch. Only truly unreadable codes return undefined.
+ */
+function codeInfo(code: string | null): { depth: number; role: string } | undefined {
+  if (!code) return undefined
+  if (CODES[code]) return CODES[code]
+  const base = code.replace(/-[RL]$/, '')
+  if (CODES[base]) return CODES[base]
+  const last = base.slice(-1)
+  if ('FWS'.includes(last)) return { depth: 5, role: 'Forward' }
+  if (last === 'M') return { depth: 3, role: 'Midfield' }
+  if (last === 'B' || last === 'D') return { depth: 1, role: 'Defender' }
+  return undefined
+}
+
+export const roleOf = (p: LineupPlayer) => codeInfo(p.position)?.role ?? p.position ?? ''
 
 /**
  * Pitch positions for the eleven starters, or null when they can't be placed with confidence —
@@ -94,12 +120,12 @@ export function placeLineup(lineup: TeamLineup): Map<number, Spot> | null {
 }
 
 function byPositionCode(xi: LineupPlayer[]): Map<number, Spot> | null {
-  if (xi.some(p => !CODES[p.position ?? ''])) return null
+  if (xi.some(p => !codeInfo(p.position))) return null
   if (xi.filter(p => p.position === 'G').length !== 1) return null
 
   const bands = new Map<number, LineupPlayer[]>()
   for (const p of xi) {
-    const d = CODES[p.position!].depth
+    const d = codeInfo(p.position)!.depth
     bands.set(d, [...(bands.get(d) ?? []), p])
   }
   const depths = [...bands.keys()].sort((a, b) => a - b)
@@ -109,7 +135,7 @@ function byPositionCode(xi: LineupPlayer[]): Map<number, Spot> | null {
     const row = bands.get(d)!.slice().sort((a, b) =>
       sideOf(a.position!) - sideOf(b.position!) || (b.formationPlace ?? 0) - (a.formationPlace ?? 0))
     row.forEach((p, i) => {
-      spots.set(p.playerId, { x: ((i + 1) / (row.length + 1)) * 100, y, line, role: CODES[p.position!].role })
+      spots.set(p.playerId, { x: ((i + 1) / (row.length + 1)) * 100, y, line, role: codeInfo(p.position)!.role })
     })
   })
   return spots
