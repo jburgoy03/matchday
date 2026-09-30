@@ -3,7 +3,6 @@ import type { Goal, MatchListItem } from '../api'
 import { goalSides, halfTimeScore, type Side } from '../goals'
 import { isLive } from '../format'
 import { Crest } from './Crest'
-import { CompetitionChip } from '../competitions'
 
 const ET = 'America/New_York'
 const timeFmt = new Intl.DateTimeFormat('en-US', { timeZone: ET, hour: 'numeric', minute: '2-digit' })
@@ -39,10 +38,8 @@ export function MatchRow({ m }: { m: MatchListItem }) {
 
   return (
     <Link to={`/match/${m.id}`} className={`m-row ${live ? 'live' : ''}`}>
-      <span className={`m-status ${live ? 'live' : ''}`}>
-        {status}
-        <CompetitionChip slug={m.competition} />
-      </span>
+      {/* No competition chip: the matches page already shows one competition at a time. */}
+      <span className={`m-status ${live ? 'live' : ''}`}>{status}</span>
 
       <span className="m-team home">
         <span>{m.home.shortName}</span>

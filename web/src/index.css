@@ -1189,6 +1189,15 @@ button.shirt:hover .shirt-label { background: rgba(9, 18, 13, 0.95); }
 .comp-picker button[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
 .comp-picker button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .table-page > .comp-picker { margin: -0.25rem 0 1rem; }
+/* Small competition label on non-league rows (team page Matches tab), tinted per competition */
+.comp-chip {
+  flex-shrink: 0; display: inline-block; padding: 0 5px; border: 1px solid currentColor; border-radius: 4px;
+  font-size: 0.66rem; font-weight: 600; line-height: 1.5; letter-spacing: 0.02em; white-space: nowrap; color: var(--muted);
+}
+.tp-opp .comp-chip { overflow: visible; }
+.comp-chip.comp-uefa-champions { color: var(--ucl); }
+.comp-chip.comp-uefa-europa { color: var(--uel); }
+.comp-chip.comp-uefa-europa-conf { color: var(--uecl); }
 /* The rail on desktop: one per line, like a menu */
 @media (min-width: 1201px) {
   .rail-comp .comp-picker { flex-direction: column; flex-wrap: nowrap; }
@@ -1236,7 +1245,6 @@ button.shirt:hover .shirt-label { background: rgba(9, 18, 13, 0.95); }
     padding: 0.45rem 0.75rem;
   }
   .m-status { align-self: center; font-size: 0.72rem; line-height: 1.2; }
-  .m-status .comp-chip { font-size: 0.6rem; padding: 0 4px; margin-top: 0.2rem; }
   .m-team { font-size: 0.92rem; gap: 0.5rem; }
   .m-team .crest { width: 20px; height: 20px; }
   .m-score { font-size: 0.95rem; }
