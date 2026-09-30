@@ -817,3 +817,127 @@ body.theme-arsenal .site-header { background: var(--surface); }
   .club-hero .form-strip { gap: 0.55rem; }
   .club-hero .form-strip a { flex-direction: column; gap: 0.2rem; }
 }
+
+/* ---------- Match page: Lineups (pitch + player list) ---------- */
+:root {
+  --home-ink: #ffffff;
+  --away-ink: #ffffff;
+  --gk: #23272e;
+  --pitch: #3e7a4b;
+  --pitch-line: rgba(255, 255, 255, 0.5);
+  --sub-off: #c2410c;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --home-ink: #16181d; --away-ink: #16181d; --sub-off: #fb923c; }
+}
+
+.lu-legend {
+  display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem 1.1rem;
+  margin: 0.75rem 0; font-size: 0.8rem; color: var(--muted);
+}
+.lu-legend > span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.lu-toggle { display: none; }
+.lu-teams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2rem; }
+.lu-team { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
+.lu-head { display: flex; align-items: center; gap: 0.6rem; font-weight: 600; }
+.lu-formation { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+.lu-where { margin-left: auto; color: var(--muted); font-size: 0.8rem; font-weight: 400; }
+
+/* The pitch: a half, halfway line at the top. Fixed height so the five lines never crowd;
+   markings in container (width) units so they keep their shape as the column narrows. */
+.pitch {
+  --disc: 42px;
+  position: relative; container-type: inline-size; height: 500px;
+  background-color: var(--pitch);
+  background-image: repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0 10%, transparent 10% 20%);
+  border: 2px solid rgba(255, 255, 255, 0.55); border-radius: 8px; overflow: hidden;
+}
+.pitch-line { position: absolute; border: 2px solid var(--pitch-line); box-sizing: border-box; pointer-events: none; }
+.pitch-circle { left: 50%; top: 0; width: 26.9cqw; aspect-ratio: 1; border-radius: 50%; transform: translate(-50%, -50%); }
+.pitch-box { left: 50%; bottom: -2px; width: 59.3cqw; height: 24.3cqw; transform: translateX(-50%); }
+.pitch-six { left: 50%; bottom: -2px; width: 26.9cqw; height: 8.1cqw; transform: translateX(-50%); }
+.pitch-arc { position: absolute; left: 50%; bottom: 24.3cqw; width: 26.9cqw; height: 5.4cqw; transform: translateX(-50%); overflow: hidden; pointer-events: none; }
+.pitch-arc::before {
+  content: ''; position: absolute; left: 0; bottom: -21.5cqw; width: 26.9cqw; aspect-ratio: 1;
+  border: 2px solid var(--pitch-line); border-radius: 50%; box-sizing: border-box;
+}
+.pitch-dot { position: absolute; left: 50%; width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.6); transform: translateX(-50%); }
+.pitch-dot-centre { top: -3px; }
+.pitch-dot-pen { bottom: calc(16.2cqw - 3px); }
+
+.shirt {
+  position: absolute; left: var(--x); top: var(--y);
+  transform: translate(-50%, calc(var(--disc) / -2));
+  display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 44px;
+}
+.shirt-num {
+  width: var(--disc); height: var(--disc); border-radius: 50%;
+  display: grid; place-items: center;
+  font-weight: 700; font-size: calc(var(--disc) * 0.44); font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.shirt-num.home, .lu-num.home { background: var(--home); color: var(--home-ink); }
+.shirt-num.away, .lu-num.away { background: var(--away); color: var(--away-ink); }
+.shirt-num.gk, .lu-num.gk { background: var(--gk); color: #fff; }
+.shirt-num.gk.home { box-shadow: 0 0 0 2px var(--home), 0 2px 6px rgba(0, 0, 0, 0.35); }
+.shirt-num.gk.away { box-shadow: 0 0 0 2px var(--away), 0 2px 6px rgba(0, 0, 0, 0.35); }
+.shirt-label {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 3px 8px 4px; border-radius: 6px; background: rgba(9, 18, 13, 0.82);
+  color: #fff; white-space: nowrap; font-size: 0.8rem; font-weight: 600; line-height: 1.2;
+}
+.shirt-marks { display: flex; gap: 0.45rem; font-size: 0.7rem; font-weight: 500; color: #dce7df; font-variant-numeric: tabular-nums; }
+.shirt-marks .mk-off { color: #ff9e8c; }
+.shirt-marks .mk-assist { border-color: #dce7df; }
+
+/* Marks, shared by the pitch and the list */
+.mk { display: inline-flex; align-items: center; gap: 3px; }
+.mk-icon { flex-shrink: 0; }
+.mk-compact { display: none; }
+.mk-assist {
+  display: inline-grid; place-items: center; width: 13px; height: 13px; box-sizing: border-box;
+  border: 1.5px solid currentColor; border-radius: 3px; font-size: 8.5px; font-weight: 700; line-height: 1;
+}
+.mk-card { display: inline-block; width: 9px; height: 12px; border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
+.mk-card.yellow { background: #f5c518; }
+.mk-card.red { background: #d0342c; }
+.mk-off { color: var(--sub-off); }
+.mk-on { color: var(--sub-in); }
+
+/* The list under the pitch */
+.lu-list ul { list-style: none; margin: 0; padding: 0; }
+.lu-sub { margin: 0.75rem 0 0.25rem; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lu-row { display: flex; align-items: center; gap: 0.75rem; min-height: 48px; padding: 0.25rem 0; box-sizing: border-box; border-bottom: 1px solid var(--border); }
+.lu-num {
+  flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 0.85rem; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.lu-who { display: flex; flex-direction: column; min-width: 0; }
+.lu-name { font-size: 0.9rem; font-weight: 600; }
+.lu-role { font-size: 0.75rem; color: var(--muted); }
+.lu-marks {
+  margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.35rem 0.75rem;
+  font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.lu-row.unused .lu-num { background: var(--border); color: var(--muted); }
+.lu-row.unused .lu-name { color: var(--muted); font-weight: 500; }
+
+@media (max-width: 640px) {
+  .lu-legend { display: none; }
+  .lu-toggle {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px;
+    margin: 0.75rem 0; padding: 4px; border-radius: 10px; background: var(--border);
+  }
+  .lu-toggle button {
+    min-height: 44px; border: 0; border-radius: 7px; background: transparent; color: var(--muted);
+    font: inherit; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .lu-toggle button[aria-pressed="true"] { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
+  .lu-teams { grid-template-columns: 1fr; }
+  .lu-team:not(.active) { display: none; }
+  .pitch { --disc: 34px; height: 470px; }
+  .shirt { gap: 3px; }
+  .shirt-label { padding: 2px 6px 3px; font-size: 0.75rem; }
+  .shirt-marks .mk-full { display: none; }
+  .shirt-marks .mk-compact { display: inline; }
+}

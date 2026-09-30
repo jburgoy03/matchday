@@ -20,7 +20,10 @@ public sealed record LineupPlayerDto(int PlayerId, string Name, string? Jersey, 
 
 public sealed record TeamLineupDto(int TeamId, string? Formation, IReadOnlyList<LineupPlayerDto> Starters, IReadOnlyList<LineupPlayerDto> Bench);
 
-public sealed record IncidentDto(string Type, int? Minute, string Clock, int? TeamId, string? Player, string? SecondaryPlayer);
+/// <summary>Player for a goal/card is the scorer or booked player; for a substitution it's the player coming on, Secondary the one going off.</summary>
+public sealed record IncidentDto(
+    string Type, int? Minute, string Clock, int? TeamId,
+    string? Player, string? SecondaryPlayer, int? PlayerId, int? SecondaryPlayerId);
 
 public sealed record MatchDetailDto(
     MatchListItemDto Match, TeamLineupDto? HomeLineup, TeamLineupDto? AwayLineup,
@@ -119,7 +122,7 @@ public static class Endpoints
         var incidents = m.Incidents
             .OrderBy(i => i.Sequence)
             .Select(i => new IncidentDto(i.Type.ToString(), i.Minute, i.ClockDisplay, i.TeamId,
-                i.PrimaryPlayer?.Name, i.SecondaryPlayer?.Name))
+                i.PrimaryPlayer?.Name, i.SecondaryPlayer?.Name, i.PrimaryPlayerId, i.SecondaryPlayerId))
             .ToList();
 
         return Results.Ok(new MatchDetailDto(

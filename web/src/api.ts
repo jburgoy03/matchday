@@ -54,8 +54,12 @@ export interface Incident {
   minute: number | null
   clock: string
   teamId: number | null
+  /** Scorer or booked player; for a substitution, the player coming on. */
   player: string | null
+  /** Assist on a goal; for a substitution, the player going off. */
   secondaryPlayer: string | null
+  playerId: number | null
+  secondaryPlayerId: number | null
 }
 
 /** ESPN stat name → value, e.g. { possessionPct: 55, totalShots: 16 } */

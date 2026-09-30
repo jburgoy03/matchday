@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { api, type LineupPlayer, type Team, type TeamLineup } from '../api'
+import { api } from '../api'
 import { useApi } from '../useApi'
-import { TeamBadge } from '../components/TeamBadge'
 import { BackLink } from '../components/BackLink'
 import { teamPath } from '../teamPath'
 import { MatchStats } from '../components/MatchStats'
-import { ICONS, Timeline } from '../components/Timeline'
+import { Timeline } from '../components/Timeline'
+import { Lineups } from '../components/Lineups'
+import { playerEvents } from '../playerEvents'
 import { formatDay, formatTime, isLive, statusLabel } from '../format'
 
 type Tab = 'timeline' | 'stats' | 'lineups'
@@ -41,12 +42,8 @@ export default function MatchPage() {
   const tab: Tab = tabs.find(t => t.id === requested)?.id ?? (m.status === 'Scheduled' ? 'lineups' : 'timeline')
   const select = (t: Tab) => setParams({ tab: t }, { replace: true })
 
-  // Goal and card icons to show next to player names in the lineups.
-  const marks = new Map<string, string>()
-  for (const i of incidents) {
-    if (!i.player || i.type === 'Substitution' || i.type === 'Other') continue
-    marks.set(i.player, (marks.get(i.player) ?? '') + ICONS[i.type])
-  }
+  // Goals, cards and subs per player, keyed by id (not name) for the pitch and the lineup list.
+  const events = playerEvents(incidents)
 
   return (
     <section className="match">
@@ -88,43 +85,9 @@ export default function MatchPage() {
         !homeLineup && !awayLineup ? (
           <p className="muted">Lineups usually appear about an hour before kickoff.</p>
         ) : (
-          <div className="lineups">
-            <LineupCard team={m.home} lineup={homeLineup} marks={marks} />
-            <LineupCard team={m.away} lineup={awayLineup} marks={marks} />
-          </div>
+          <Lineups home={m.home} away={m.away} homeLineup={homeLineup} awayLineup={awayLineup} events={events} />
         )
       )}
     </section>
-  )
-}
-
-function LineupCard({ team, lineup, marks }: { team: Team; lineup: TeamLineup | null; marks: Map<string, string> }) {
-  return (
-    <div className="lineup card">
-      <div className="lineup-head">
-        <Link to={teamPath(team)} className="team-link"><TeamBadge team={team} short /></Link>
-        <span className="muted">{lineup?.formation}</span>
-      </div>
-      {!lineup ? (
-        <p className="muted">Not announced yet.</p>
-      ) : (
-        <>
-          <ul>{lineup.starters.map(p => <PlayerRow key={p.playerId} p={p} mark={marks.get(p.name)} />)}</ul>
-          <h3>Bench</h3>
-          <ul>{lineup.bench.map(p => <PlayerRow key={p.playerId} p={p} mark={marks.get(p.name)} />)}</ul>
-        </>
-      )}
-    </div>
-  )
-}
-
-function PlayerRow({ p, mark }: { p: LineupPlayer; mark?: string }) {
-  return (
-    <li>
-      <span className="jersey">{p.jersey}</span>
-      <span>{p.name}</span>
-      <span className="marks">{mark}</span>
-      <span className="pos muted">{p.position === 'SUB' ? '' : p.position}</span>
-    </li>
   )
 }
