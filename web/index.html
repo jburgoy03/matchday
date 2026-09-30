@@ -5,6 +5,16 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Prem</title>
+    <script>
+      // Apply the saved theme before the first paint, so there's no flash of the wrong one.
+      // Keep in step with web/src/theme.ts.
+      (function () {
+        var pref = 'system'
+        try { pref = localStorage.getItem('theme') || 'system' } catch (e) {}
+        var dark = pref === 'dark' || (pref !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

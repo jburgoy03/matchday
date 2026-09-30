@@ -5,6 +5,7 @@ import TablePage from './pages/TablePage'
 import TeamPage from './pages/TeamPage'
 import ArsenalPage from './pages/ArsenalPage'
 import { ExternalLink } from './components/Icons'
+import { ThemeToggle } from './components/ThemeToggle'
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
           <span>deanburgoyne.dev</span>
           <ExternalLink size={14} />
         </a>
+        <ThemeToggle />
       </header>
       <main>
         <Routes>

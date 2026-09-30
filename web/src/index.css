@@ -11,13 +11,15 @@
   --home: var(--accent);
   --away: #1c9c8c;
   --sub-in: #1f9d55;
-  color-scheme: light dark;
+  color-scheme: light;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.4;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+/* Dark theme. <html data-theme> is set before first paint by the script in index.html
+   (the visitor's choice, or their system setting when they haven't chosen) — see theme.ts. */
+:root[data-theme="dark"] {
+    color-scheme: dark;
     --bg: #0f1115;
     --surface: #171a21;
     --text: #e8eaf0;
@@ -26,7 +28,6 @@
     --accent: #b99cf0;
     --away: #5ccfc0;
     --sub-in: #4ade80;
-  }
 }
 
 * { box-sizing: border-box; }
@@ -461,7 +462,7 @@ h2 { font-size: 1rem; margin: 1.5rem 0 0.5rem; }
 }
 /* ---------- Team page ---------- */
 :root { --win: #1f9d55; --draw: #6b7280; --loss: #d0342c; }
-@media (prefers-color-scheme: dark) { :root { --win: #4ade80; --draw: #9aa3b2; --loss: #f87171; } }
+:root[data-theme="dark"] { --win: #4ade80; --draw: #9aa3b2; --loss: #f87171; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .strong { font-weight: 700; }
@@ -752,8 +753,7 @@ body.theme-arsenal {
   --club-gold: #9c7a3c;
   overflow-x: clip;
 }
-@media (prefers-color-scheme: dark) {
-  body.theme-arsenal {
+:root[data-theme="dark"] body.theme-arsenal {
     --bg: #12070a;
     --surface: #1d0c10;
     --text: #f6eee8;
@@ -762,7 +762,6 @@ body.theme-arsenal {
     --accent: #e3bf76;
     --home: #e3bf76;
     --club-gold: #e3bf76;
-  }
 }
 body.theme-arsenal .site-header { background: var(--surface); }
 .site-header nav a.club-nav.active { color: var(--text); border-bottom-color: var(--club-gold, var(--accent)); }
@@ -827,9 +826,7 @@ body.theme-arsenal .site-header { background: var(--surface); }
   --pitch-line: rgba(255, 255, 255, 0.5);
   --sub-off: #c2410c;
 }
-@media (prefers-color-scheme: dark) {
-  :root { --home-ink: #16181d; --away-ink: #16181d; --sub-off: #fb923c; }
-}
+:root[data-theme="dark"] { --home-ink: #16181d; --away-ink: #16181d; --sub-off: #fb923c; }
 
 .lu-legend {
   display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem 1.1rem;
@@ -949,9 +946,27 @@ body.theme-arsenal .site-header { background: var(--surface); }
   --home: var(--home-l); --away: var(--away-l);
   --home-ink: var(--home-ink-l); --away-ink: var(--away-ink-l);
 }
-@media (prefers-color-scheme: dark) {
-  .team-coloured {
-    --home: var(--home-d); --away: var(--away-d);
-    --home-ink: var(--home-ink-d); --away-ink: var(--away-ink-d);
-  }
+:root[data-theme="dark"] .team-coloured {
+  --home: var(--home-d); --away: var(--away-d);
+  --home-ink: var(--home-ink-d); --away-ink: var(--away-ink-d);
+}
+
+/* ---------- Theme switch (header) ---------- */
+.theme-toggle {
+  display: inline-grid; place-items: center; flex: none;
+  width: 36px; height: 36px; padding: 0; border: 0; border-radius: 8px;
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.theme-toggle:hover { color: var(--text); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 480px) {
+  /* Phones: tighten the header so brand, three tabs, the site link and this button all fit */
+  .site-header { gap: 0.6rem; }
+  .site-header nav { gap: 0.7rem; }
+  .theme-toggle { width: 32px; height: 32px; }
+}
+@media (max-width: 400px) {
+  .site-header { gap: 0.45rem; padding-inline: 0.6rem; }
+  .site-header nav { gap: 0.55rem; }
+  .brand, .site-header nav a { font-size: 0.9rem; }
 }
