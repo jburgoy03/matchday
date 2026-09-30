@@ -6,10 +6,12 @@ import TeamPage from './pages/TeamPage'
 import ArsenalPage from './pages/ArsenalPage'
 import { ExternalLink } from './components/Icons'
 import { ThemeToggle } from './components/ThemeToggle'
+import { PlayerProfileProvider } from './components/PlayerProfile'
 
 export default function App() {
   return (
     <BrowserRouter>
+      <PlayerProfileProvider>
       <header className="site-header">
         <span className="brand">Matchday</span>
         <nav>
@@ -37,6 +39,7 @@ export default function App() {
           <Route path="/arsenal" element={<ArsenalPage />} />
         </Routes>
       </main>
+      </PlayerProfileProvider>
     </BrowserRouter>
   )
 }

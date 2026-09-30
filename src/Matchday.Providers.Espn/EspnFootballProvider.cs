@@ -46,6 +46,42 @@ public sealed class EspnFootballProvider(HttpClient http) : IFootballProvider
         return doc is null ? [] : EspnMapper.MapNews(doc.RootElement);
     }
 
+    // Player stats live on a different ESPN host from the scoreboard and summary.
+    private const string AthleteBase = "https://site.web.api.espn.com/apis/common/v3/sports/soccer/athletes/";
+
+    // One request for the current club (which also lists every side he's played for), then one per
+    // other side, run together. A side that fails or has nothing still appears, just without seasons.
+    public async Task<PlayerCareer?> GetPlayerCareerAsync(string playerId, CancellationToken ct = default)
+    {
+        var path = $"{AthleteBase}{Uri.EscapeDataString(playerId)}/stats";
+        using var first = await GetJsonAsync(path, nullOnMissing: true, ct);
+        if (first is null) return null;
+
+        var (currentId, teams) = EspnMapper.MapCareerTeams(first.RootElement);
+        var clubs = new List<CareerClub?>();
+        if (currentId is not null)
+        {
+            var name = teams.FirstOrDefault(t => t.Id == currentId).Name ?? "";
+            clubs.Add(EspnMapper.MapCareerClub(first.RootElement, currentId, name, current: true));
+        }
+
+        var others = await Task.WhenAll(teams.Where(t => t.Id != currentId).Select(async t =>
+        {
+            try
+            {
+                using var doc = await GetJsonAsync($"{path}?team={Uri.EscapeDataString(t.Id)}", nullOnMissing: true, ct);
+                return EspnMapper.MapCareerClub(doc?.RootElement, t.Id, t.Name, current: false);
+            }
+            catch (HttpRequestException)
+            {
+                return EspnMapper.MapCareerClub(null, t.Id, t.Name, current: false);
+            }
+        }));
+        clubs.AddRange(others);
+
+        return new PlayerCareer(EspnMapper.OrderCareer(clubs.OfType<CareerClub>()));
+    }
+
     private async Task<JsonDocument?> GetJsonAsync(string path, bool nullOnMissing, CancellationToken ct)
     {
         using var resp = await http.GetAsync(path, ct);

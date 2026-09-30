@@ -102,3 +102,15 @@ public sealed record StandingRow(
     int GoalsFor,
     int GoalsAgainst,
     int Points);
+
+/// <summary>A player's club career, oldest club first. National sides are left out.</summary>
+public sealed record PlayerCareer(IReadOnlyList<CareerClub> Clubs);
+
+/// <summary>
+/// One club and its league seasons, newest first. Seasons can be empty when the provider has no
+/// numbers for that league. Color is six lowercase hex digits without '#'. Current = the player's club now.
+/// </summary>
+public sealed record CareerClub(string ProviderId, string Name, string? Color, bool Current, IReadOnlyList<CareerSeason> Seasons);
+
+/// <summary>League stats for one season at one club. Year is the season's start year; Label reads like "2021-22".</summary>
+public sealed record CareerSeason(int Year, string Label, string League, int Starts, int Goals, int Assists);

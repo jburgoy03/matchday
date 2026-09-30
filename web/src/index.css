@@ -1024,3 +1024,100 @@ body.theme-arsenal .site-header { background: var(--surface); }
   .site-header nav { gap: 0.55rem; }
   .brand, .site-header nav a { font-size: 0.9rem; }
 }
+
+/* ---------- Player names that open the profile ---------- */
+.player-link {
+  display: inline; padding: 0; border: 0; background: none; font: inherit; color: inherit;
+  text-align: inherit; cursor: pointer; text-decoration: underline; text-decoration-color: transparent;
+  text-underline-offset: 3px; transition: text-decoration-color 120ms ease;
+}
+.player-link:hover { text-decoration-color: currentColor; }
+.player-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+/* The pitch shirt is itself the button */
+button.shirt { padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; }
+button.shirt:hover .shirt-name { text-decoration: underline; text-underline-offset: 2px; }
+button.shirt:focus-visible { outline: 2px solid #fff; outline-offset: 3px; border-radius: 8px; }
+
+/* ---------- Player profile popup (native <dialog>) ---------- */
+.pp {
+  width: min(720px, calc(100vw - 2rem)); max-height: calc(100vh - 4rem); padding: 0;
+  border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.45); overflow: auto;
+}
+.pp::backdrop { background: rgb(0 0 0 / 0.55); }
+.pp-band { height: 6px; }
+.pp-body { display: flex; flex-direction: column; gap: 28px; padding: 32px 40px 36px; }
+.pp-handle { display: none; }
+.pp-head { display: flex; align-items: center; gap: 16px; }
+.pp-num {
+  flex-shrink: 0; width: 60px; height: 60px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: #fff; font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.pp-title { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex-grow: 1; }
+.pp-title h2 { margin: 0; font-size: 1.5rem; font-weight: 700; }
+.pp-sub { font-size: 0.87rem; }
+.pp-meta { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--muted); }
+.pp-close {
+  flex-shrink: 0; align-self: flex-start; width: 44px; height: 44px; display: grid; place-items: center;
+  border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer;
+}
+.pp-close:hover { color: var(--text); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.pp-section { display: flex; flex-direction: column; gap: 12px; }
+.pp-section h3, .pp-table-h {
+  margin: 0; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+}
+.pp-table-h { margin-top: 12px; }
+.pp-note { margin: 0; font-size: 0.78rem; }
+.pp-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.pp-tile {
+  display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 5%, var(--surface));
+}
+.pp-tile strong { font-size: 1.75rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.pp-tile span { font-size: 0.75rem; color: var(--muted); }
+.pp-clubs { list-style: none; margin: 0; padding: 0; display: flex; gap: 8px; }
+.pp-clubs li {
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--muted) 40%, var(--border));
+  background: color-mix(in srgb, var(--text) 5%, var(--surface));
+}
+.pp-clubs li.none { background: transparent; border-color: var(--border); }
+.pp-clubs li.none .pp-club-name { color: var(--muted); }
+.pp-club-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-weight: 600; font-size: 0.85rem; }
+.pp-clubs .pp-club-name { align-items: flex-start; line-height: 1.3; }
+.pp-clubs .pp-swatch { margin-top: 0.35em; }
+.pp-club-years { font-size: 0.75rem; color: var(--muted); }
+.pp-swatch { flex-shrink: 0; width: 8px; height: 8px; border-radius: 2px; }
+.pp-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+.pp-table th, .pp-table td { padding: 9px 8px; text-align: left; border-top: 1px solid var(--border); white-space: nowrap; }
+.pp-table th:first-child, .pp-table td:first-child { padding-left: 0; }
+.pp-table th:last-child, .pp-table td:last-child { padding-right: 0; }
+.pp-table thead th {
+  border-top: 0; padding-top: 0; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted);
+}
+.pp-table .num { text-align: right; width: 3.2rem; }
+.pp-table td:nth-child(2) { white-space: normal; }
+.pp-table td.strong { font-weight: 600; }
+.pp-table tr.now td { background: color-mix(in srgb, var(--text) 5%, transparent); font-weight: 600; }
+.pp-table tfoot th, .pp-table tfoot td { border-top: 2px solid color-mix(in srgb, var(--muted) 45%, var(--border)); font-weight: 700; }
+.pp-table abbr { text-decoration: none; }
+
+/* Phones: a sheet that slides up from the bottom */
+@media (max-width: 640px) {
+  .pp {
+    width: 100%; max-width: 100%; max-height: 90vh; margin: auto 0 0; border-radius: 16px 16px 0 0;
+    border-bottom: 0;
+  }
+  .pp-body { gap: 24px; padding: 14px 22px 28px; }
+  .pp-handle { display: block; align-self: center; width: 40px; height: 4px; border-radius: 2px; background: var(--border); }
+  .pp-num { width: 52px; height: 52px; font-size: 1.35rem; }
+  .pp-title h2 { font-size: 1.3rem; }
+  .pp-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pp-tile strong { font-size: 1.5rem; }
+  .pp-clubs { flex-wrap: wrap; }
+  .pp-clubs li { flex: 1 1 40%; }
+  .pp-table { font-size: 0.84rem; }
+  .pp-table th, .pp-table td { padding-inline: 5px; }
+  .pp-table .num { width: 2.6rem; }
+}

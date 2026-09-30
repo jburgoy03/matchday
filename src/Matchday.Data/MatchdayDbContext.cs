@@ -32,7 +32,11 @@ public class MatchdayDbContext(DbContextOptions<MatchdayDbContext> options) : Db
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<Team>(e => e.HasIndex(x => x.ProviderId).IsUnique());
-        b.Entity<Player>(e => e.HasIndex(x => x.ProviderId).IsUnique());
+        b.Entity<Player>(e =>
+        {
+            e.HasIndex(x => x.ProviderId).IsUnique();
+            e.Property(x => x.CareerJson).HasColumnType("jsonb");
+        });
 
         b.Entity<Match>(e =>
         {

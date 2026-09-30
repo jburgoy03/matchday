@@ -156,6 +156,57 @@ export interface CleanSheetLeader {
   starts: number
 }
 
+/** This season in the league, from our own match data. cleanSheets is only set for keepers. */
+export interface PlayerSeason {
+  /** "2026-27" */
+  label: string
+  apps: number
+  starts: number
+  goals: number
+  assists: number
+  yellowCards: number
+  redCards: number
+  cleanSheets: number | null
+}
+
+export interface PlayerProfile {
+  id: number
+  name: string
+  team: Team | null
+  jersey: string | null
+  /** G, D, M or F */
+  position: string | null
+  age: number | null
+  nationality: string | null
+  flagUrl: string | null
+  season: PlayerSeason
+}
+
+/** League stats for one season at one club, from ESPN. year = the season's start year. */
+export interface CareerSeason {
+  year: number
+  label: string
+  league: string
+  starts: number
+  goals: number
+  assists: number
+}
+
+export interface CareerClub {
+  providerId: string
+  name: string
+  /** Six hex digits without '#', or null */
+  color: string | null
+  current: boolean
+  /** Newest first; empty when ESPN has no numbers for that club */
+  seasons: CareerSeason[]
+}
+
+/** Clubs oldest first; national sides are left out. */
+export interface PlayerCareer {
+  clubs: CareerClub[]
+}
+
 export interface Leaderboards {
   scorers: Leader[]
   assists: Leader[]
@@ -175,6 +226,8 @@ export const api = {
   standings: (signal?: AbortSignal) => get<Standing[]>('/standings', signal),
   leaders: (top = 5, signal?: AbortSignal) => get<Leader[]>(`/leaders?top=${top}`, signal),
   leaderboards: (top = 5, signal?: AbortSignal) => get<Leaderboards>(`/leaderboards?top=${top}`, signal),
+  player: (id: number, signal?: AbortSignal) => get<PlayerProfile>(`/players/${id}`, signal),
+  playerCareer: (id: number, signal?: AbortSignal) => get<PlayerCareer>(`/players/${id}/career`, signal),
   team: (id: string, signal?: AbortSignal) => get<TeamPage>(`/teams/${id}`, signal),
   news: (top = 10, signal?: AbortSignal) => get<News[]>(`/news?top=${top}`, signal),
 }

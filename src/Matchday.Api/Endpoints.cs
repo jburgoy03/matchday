@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Matchday.Core;
 using Matchday.Core.Providers;
 using Matchday.Data;
@@ -36,6 +37,14 @@ public sealed record LeaderDto(int PlayerId, string Name, TeamDto? Team, int Goa
 /// <summary>A goalkeeper's clean sheets: starts in finished matches where his side conceded nothing and he wasn't taken off.</summary>
 public sealed record CleanSheetDto(int PlayerId, string Name, TeamDto? Team, int CleanSheets, int Starts);
 
+/// <summary>A player's league numbers this season, from our own match data. CleanSheets only for keepers.</summary>
+public sealed record PlayerSeasonDto(string Label, int Apps, int Starts, int Goals, int Assists, int YellowCards, int RedCards, int? CleanSheets);
+
+/// <summary>The player profile popup. Position is G, D, M or F. Career comes separately from /players/{id}/career.</summary>
+public sealed record PlayerDto(
+    int Id, string Name, TeamDto? Team, string? Jersey, string? Position, int? Age, string? Nationality, string? FlagUrl,
+    PlayerSeasonDto Season);
+
 /// <summary>The season's leaderboards in one response, for the matches page sidebar.</summary>
 public sealed record LeaderboardsDto(IReadOnlyList<LeaderDto> Scorers, IReadOnlyList<LeaderDto> Assists, IReadOnlyList<CleanSheetDto> CleanSheets);
 
@@ -72,6 +81,8 @@ public static class Endpoints
         api.MapGet("/teams/{id:int}", GetTeam);
         api.MapGet("/leaders", GetLeaders);
         api.MapGet("/leaderboards", GetLeaderboards);
+        api.MapGet("/players/{id:int}", GetPlayer);
+        api.MapGet("/players/{id:int}/career", GetPlayerCareer);
         api.MapGet("/news", GetNews);
     }
 
@@ -423,6 +434,121 @@ public static class Endpoints
             scorerIds.Select(id => Leader(id, goals[id].TeamId)).ToList(),
             assistIds.Select(id => Leader(id, assists[id].TeamId)).ToList(),
             sheets.Select(s => new CleanSheetDto(s.PlayerId, names.GetValueOrDefault(s.PlayerId, ""), TeamOf(s.TeamId), s.CleanSheets, s.Starts)).ToList()));
+    }
+
+    /// <summary>Profile header and this season's numbers, all from our own data, so it's instant.</summary>
+    private static async Task<IResult> GetPlayer(int id, MatchdayDbContext db, TimeProvider clock, CancellationToken ct)
+    {
+        var player = await db.Players.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct);
+        if (player is null) return Results.NotFound();
+
+        var todayEt = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(clock.GetUtcNow(), Eastern).DateTime);
+        var seasonStart = Season.StartFor(todayEt);
+        var seasonStartUtc = StartOfEasternDayUtc(seasonStart);
+
+        var member = await db.SquadMembers.AsNoTracking()
+            .Where(s => s.PlayerId == id)
+            .OrderByDescending(s => s.UpdatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        // Same rules as the squad tab: finished matches only; an appearance is a start or coming on.
+        var finished = await db.Matches.AsNoTracking()
+            .Where(m => m.KickoffUtc >= seasonStartUtc && m.Status == MatchStatus.FullTime)
+            .Select(m => new { m.Id, m.KickoffUtc, m.HomeTeamId, m.HomeScore, m.AwayScore })
+            .ToDictionaryAsync(m => m.Id, ct);
+        var finishedIds = finished.Keys.ToList();
+        var lineups = await db.LineupEntries.AsNoTracking()
+            .Where(l => l.PlayerId == id && finishedIds.Contains(l.MatchId))
+            .Select(l => new { l.MatchId, l.TeamId, l.Starter, l.Position, l.Jersey })
+            .ToListAsync(ct);
+        var incidents = await db.Incidents.AsNoTracking()
+            .Where(i => finishedIds.Contains(i.MatchId) && (i.PrimaryPlayerId == id || i.SecondaryPlayerId == id))
+            .Select(i => new { i.MatchId, i.Type, i.PrimaryPlayerId, i.SecondaryPlayerId })
+            .ToListAsync(ct);
+
+        var started = lineups.Where(l => l.Starter).Select(l => l.MatchId).ToHashSet();
+        var cameOn = incidents.Where(i => i.Type == MatchEventType.Substitution && i.PrimaryPlayerId == id).Select(i => i.MatchId);
+        var subbedOff = incidents.Where(i => i.Type == MatchEventType.Substitution && i.SecondaryPlayerId == id).Select(i => i.MatchId).ToHashSet();
+        int Count(Func<MatchEventType, bool> type, bool secondary = false) =>
+            incidents.Count(i => type(i.Type) && (secondary ? i.SecondaryPlayerId : i.PrimaryPlayerId) == id);
+
+        var keeper = member?.Position == "G" || lineups.Any(l => l.Position == "G");
+        int? cleanSheets = keeper
+            ? lineups.Count(l =>
+            {
+                if (!l.Starter || l.Position != "G" || subbedOff.Contains(l.MatchId)) return false;
+                var m = finished[l.MatchId];
+                return (l.TeamId == m.HomeTeamId ? m.AwayScore : m.HomeScore) == 0;
+            })
+            : null;
+
+        // Club and shirt: the current squad if he's in one, otherwise his latest match.
+        var latest = lineups.OrderByDescending(l => finished[l.MatchId].KickoffUtc).FirstOrDefault();
+        var teamId = member?.TeamId ?? latest?.TeamId;
+        var team = teamId is null ? null : await db.Teams.AsNoTracking().FirstOrDefaultAsync(t => t.Id == teamId, ct);
+
+        var y = seasonStart.Year;
+        return Results.Ok(new PlayerDto(
+            player.Id, player.Name, team is null ? null : ToTeam(team),
+            member?.Jersey ?? latest?.Jersey,
+            member?.Position ?? PositionGroup(latest?.Position),
+            member?.Age, member?.Nationality, member?.FlagUrl,
+            new PlayerSeasonDto(
+                $"{y}-{(y + 1) % 100:D2}",
+                started.Concat(cameOn).Distinct().Count(),
+                started.Count,
+                Count(t => t is MatchEventType.Goal or MatchEventType.PenaltyGoal),
+                Count(t => t is MatchEventType.Goal, secondary: true),
+                Count(t => t is MatchEventType.YellowCard),
+                Count(t => t is MatchEventType.RedCard),
+                cleanSheets)));
+    }
+
+    /// <summary>A lineup position code (CD-R, AM-L, F…) → G, D, M or F, the squad's groups.</summary>
+    private static string? PositionGroup(string? code) => code switch
+    {
+        null or "" or "SUB" => null,
+        "G" => "G",
+        _ when code.StartsWith("AM") || code.StartsWith("DM") || code.StartsWith("CM") || code is "M" or "LM" or "RM" => "M",
+        _ when code.StartsWith("CD") || code.StartsWith("CB") || code.EndsWith("B") || code is "SW" => "D",
+        _ => "F",
+    };
+
+    private static readonly TimeSpan CareerMaxAge = TimeSpan.FromDays(7);
+    private static readonly JsonSerializerOptions CareerJsonOptions = new(JsonSerializerDefaults.Web);
+
+    /// <summary>
+    /// Club career from the provider. Fetched the first time anyone opens the profile (several provider
+    /// calls, a second or two), then kept for a week — past seasons don't change.
+    /// </summary>
+    private static async Task<IResult> GetPlayerCareer(
+        int id, MatchdayDbContext db, IFootballProvider provider, TimeProvider clock, ILoggerFactory logs, CancellationToken ct)
+    {
+        var player = await db.Players.FirstOrDefaultAsync(p => p.Id == id, ct);
+        if (player is null) return Results.NotFound();
+
+        var now = clock.GetUtcNow();
+        if (player.CareerJson is null || player.CareerSyncedAt is null || now - player.CareerSyncedAt > CareerMaxAge)
+        {
+            try
+            {
+                var fresh = await provider.GetPlayerCareerAsync(player.ProviderId, ct);
+                if (fresh is not null)
+                {
+                    player.CareerJson = JsonSerializer.Serialize(fresh, CareerJsonOptions);
+                    player.CareerSyncedAt = now;
+                    await db.SaveChangesAsync(ct);
+                }
+            }
+            catch (Exception ex) when ((ex is HttpRequestException || ex is TaskCanceledException) && !ct.IsCancellationRequested)
+            {
+                // Keep whatever we had; an older career beats none.
+                logs.CreateLogger("Matchday.Api.Players").LogWarning(ex, "Career fetch failed for player {PlayerId}", id);
+            }
+        }
+
+        var career = player.CareerJson is null ? null : JsonSerializer.Deserialize<PlayerCareer>(player.CareerJson, CareerJsonOptions);
+        return Results.Ok(career ?? new PlayerCareer([]));
     }
 
     private static MatchListItemDto ToListItem(Match m, IReadOnlyList<GoalDto> goals) => new(

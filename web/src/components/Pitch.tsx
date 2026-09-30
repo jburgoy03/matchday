@@ -4,6 +4,7 @@ import type { Side } from '../goals'
 import { surname, type Spot } from '../formation'
 import type { PlayerEvents } from '../playerEvents'
 import { EventMarks } from './EventMarks'
+import { useOpenPlayer } from './PlayerProfile'
 
 /**
  * One club's starting eleven on a half-pitch, attacking up the page. A grid of positioned divs,
@@ -16,6 +17,7 @@ export function Pitch({ lineup, spots, events, side, teamName }: {
   side: Side
   teamName: string
 }) {
+  const openPlayer = useOpenPlayer()
   return (
     <div className="pitch" role="group" aria-label={`${teamName} ${lineup.formation ?? ''} on the pitch`}>
       <div className="pitch-line pitch-circle" />
@@ -30,13 +32,20 @@ export function Pitch({ lineup, spots, events, side, teamName }: {
         if (!s) return null
         const keeper = s.line === 0
         return (
-          <div key={p.playerId} className="shirt" style={{ '--x': `${s.x}%`, '--y': `${s.y}%` } as CSSProperties}>
+          <button
+            type="button"
+            key={p.playerId}
+            className="shirt"
+            style={{ '--x': `${s.x}%`, '--y': `${s.y}%` } as CSSProperties}
+            onClick={() => openPlayer(p.playerId)}
+            aria-label={`${p.name}, number ${p.jersey ?? ''}. Open profile`}
+          >
             <span className={`shirt-num ${side}${keeper ? ' gk' : ''}`}>{p.jersey}</span>
             <span className="shirt-label">
               <span className="shirt-name" title={p.name}>{surname(p.name)}</span>
               <EventMarks events={events.get(p.playerId)} className="shirt-marks" />
             </span>
-          </div>
+          </button>
         )
       })}
     </div>

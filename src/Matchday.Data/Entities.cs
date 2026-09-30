@@ -20,6 +20,9 @@ public class Player
     public int Id { get; set; }
     public required string ProviderId { get; set; }
     public required string Name { get; set; }
+    /// <summary>The provider's club career (a serialized PlayerCareer), fetched when someone opens the profile. Null = never fetched.</summary>
+    public string? CareerJson { get; set; }
+    public DateTimeOffset? CareerSyncedAt { get; set; }
 }
 
 public class Match

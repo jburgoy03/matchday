@@ -4,6 +4,7 @@ import type { Leaderboards, MatchListItem, Standing, Team } from '../api'
 import { ChevronRight } from './Icons'
 import { Crest } from './Crest'
 import { teamPath } from '../teamPath'
+import { PlayerName } from './PlayerProfile'
 
 const ET = 'America/New_York'
 const whenFmt = new Intl.DateTimeFormat('en-US', {
@@ -61,7 +62,7 @@ function Leaders({ boards }: { boards: Leaderboards }) {
         <div className="side-scorers">
           {shown.map(r => (
             <div key={r.playerId} className="side-scorer">
-              <span className="name">{r.name}</span>
+              <PlayerName id={r.playerId} className="name">{r.name}</PlayerName>
               <span className="muted abbr">{r.team?.abbreviation ?? ''}</span>
               <strong>{r.value}</strong>
             </div>

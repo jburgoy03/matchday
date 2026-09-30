@@ -8,6 +8,7 @@ import { ChevronRight } from '../components/Icons'
 import { teamPath } from '../teamPath'
 import { Crest } from '../components/Crest'
 import { NewsList, NewsLead, NewsRow } from '../components/NewsList'
+import { PlayerName } from '../components/PlayerProfile'
 
 type Tab = 'overview' | 'matches' | 'squad' | 'stats' | 'news'
 type Result = 'W' | 'D' | 'L'
@@ -279,7 +280,7 @@ function LeaderTable({ players, lead }: { players: SquadPlayer[]; lead: 'goals' 
       {players.map(p => (
         <Fragment key={p.playerId}>
           <span className="jersey-chip">{p.jersey}</span>
-          <span className="tp-scorer-name">{p.name}</span>
+          <PlayerName id={p.playerId} className="tp-scorer-name">{p.name}</PlayerName>
           {lead === 'goals' ? (
             <><strong>{p.goals}</strong><span className="muted">{p.assists}</span></>
           ) : (
@@ -534,7 +535,7 @@ function SquadTab({ squad }: { squad: SquadPlayer[] }) {
                 <td><span className="jersey-chip">{p.jersey ?? '–'}</span></td>
                 <td className="name">
                   {p.flagUrl && <img className="flag show-sm" src={p.flagUrl} alt={p.nationality ?? ''} width={18} height={12} />}
-                  {p.name}
+                  <PlayerName id={p.playerId}>{p.name}</PlayerName>
                 </td>
                 <td className="hide-sm nation">
                   {p.flagUrl && <img className="flag" src={p.flagUrl} alt="" width={18} height={12} />}

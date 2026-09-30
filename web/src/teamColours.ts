@@ -84,6 +84,12 @@ function pick(team: Team, theme: Theme, avoid: RGB | null): RGB | null {
 
 const inkFor = (c: RGB) => (contrast(c, [255, 255, 255]) >= contrast(c, toRgb(INK_DARK)!) ? '#ffffff' : INK_DARK)
 
+/** White or near-black, whichever reads better on this colour ("#rrggbb"). */
+export const inkOn = (hex: string) => {
+  const c = toRgb(hex)
+  return c ? inkFor(c) : '#ffffff'
+}
+
 /** Inline CSS variables for the match page; the `.team-coloured` rules in index.css pick the theme. */
 export function matchColourVars(home: Team, away: Team): CSSProperties {
   const vars: Record<string, string> = {}
