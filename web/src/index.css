@@ -920,6 +920,9 @@ body.theme-arsenal .site-header { background: var(--surface); }
   position: absolute; left: var(--x); top: var(--y);
   transform: translate(-50%, calc(var(--disc) / -2));
   display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 44px;
+  /* Size to the label, not to the space left before the pitch's right edge (which would squeeze
+     shirts on the right). The label's own max-width below then does the limiting. */
+  width: max-content;
 }
 .shirt-num {
   width: var(--disc); height: var(--disc); border-radius: 50%;
@@ -936,13 +939,16 @@ body.theme-arsenal .site-header { background: var(--surface); }
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   padding: 3px 8px 4px; border-radius: 6px; background: rgba(9, 18, 13, 0.82);
   color: #fff; white-space: nowrap; font-size: 0.8rem; font-weight: 600; line-height: 1.2;
+  /* --room (set per shirt in Pitch.tsx) is the gap to the nearest neighbour on the same line */
+  max-width: calc(var(--room, 100cqw) - 6px); box-sizing: border-box;
 }
-.shirt-marks { display: flex; gap: 0.45rem; font-size: 0.7rem; font-weight: 500; color: #dce7df; font-variant-numeric: tabular-nums; }
+.shirt-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.shirt-marks { display: flex; flex-wrap: wrap; justify-content: center; gap: 1px 0.45rem; font-size: 0.7rem; font-weight: 500; color: #dce7df; font-variant-numeric: tabular-nums; }
 .shirt-marks .mk-off { color: #ff9e8c; }
 .shirt-marks .mk-assist { border-color: #dce7df; }
 
-/* Marks, shared by the pitch and the list */
-.mk { display: inline-flex; align-items: center; gap: 3px; }
+/* Marks, shared by the pitch and the list. One mark never breaks; marks wrap between each other. */
+.mk { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
 .mk-icon { flex-shrink: 0; }
 .mk-compact { display: none; }
 .mk-assist {

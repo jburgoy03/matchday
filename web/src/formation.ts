@@ -134,8 +134,10 @@ function byPositionCode(xi: LineupPlayer[]): Map<number, Spot> | null {
     const y = depths.length === 1 ? 50 : 88 - (line / (depths.length - 1)) * 76
     const row = bands.get(d)!.slice().sort((a, b) =>
       sideOf(a.position!) - sideOf(b.position!) || (b.formationPlace ?? 0) - (a.formationPlace ?? 0))
+    // Each player gets an equal share of the width, centred in it (a back four at 12.5/37.5/62.5/87.5),
+    // so labels have as much room as the line allows instead of leaving empty strips by the touchlines.
     row.forEach((p, i) => {
-      spots.set(p.playerId, { x: ((i + 1) / (row.length + 1)) * 100, y, line, role: codeInfo(p.position)!.role })
+      spots.set(p.playerId, { x: ((i + 0.5) / row.length) * 100, y, line, role: codeInfo(p.position)!.role })
     })
   })
   return spots

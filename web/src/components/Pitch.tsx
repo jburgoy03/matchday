@@ -7,6 +7,20 @@ import { EventMarks } from './EventMarks'
 import { useOpenPlayer } from './PlayerProfile'
 
 /**
+ * How wide a shirt's label may be, as a % of the pitch width: the gap to the nearest shirt on the
+ * same line, and never so wide it runs off the touchline. Labels wrap their marks inside that, so a
+ * busy forward (three goals and a sub) no longer spills over his neighbour.
+ */
+function labelRoom(id: number, spots: Map<number, Spot>): number {
+  const s = spots.get(id)!
+  let room = 2 * Math.min(s.x, 100 - s.x)
+  for (const [other, o] of spots) {
+    if (other !== id && Math.abs(o.y - s.y) < 12) room = Math.min(room, Math.abs(o.x - s.x))
+  }
+  return room
+}
+
+/**
  * One club's starting eleven on a half-pitch, attacking up the page. A grid of positioned divs,
  * not an SVG, so names stay selectable text. Markings are CSS borders sized in container units.
  */
@@ -36,7 +50,7 @@ export function Pitch({ lineup, spots, events, side, teamName }: {
             type="button"
             key={p.playerId}
             className="shirt"
-            style={{ '--x': `${s.x}%`, '--y': `${s.y}%` } as CSSProperties}
+            style={{ '--x': `${s.x}%`, '--y': `${s.y}%`, '--room': `${labelRoom(p.playerId, spots)}cqw` } as CSSProperties}
             onClick={() => openPlayer(p.playerId)}
             aria-label={`${p.name}, number ${p.jersey ?? ''}. Open profile`}
           >
