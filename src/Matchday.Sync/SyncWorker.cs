@@ -53,6 +53,15 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
     private DateTimeOffset? _newsSyncedAt;
     private bool _newsMarkLoaded;
 
+    // Club news: the league feed only mentions each club now and then, so every club also gets its own
+    // feed pulled. Swept a couple of clubs per tick (20 clubs ≈ 5 min) and started again every few hours.
+    private static readonly TimeSpan ClubNewsInterval = TimeSpan.FromHours(3);
+    private const int ClubNewsPerTick = 2;
+    private const string ClubNewsKey = "club-news-swept-at";
+    private DateTimeOffset? _clubNewsSweptAt;
+    private bool _clubNewsMarkLoaded;
+    private readonly Queue<string> _clubNewsQueue = new();
+
     // Squads: every club's roster once a day. The last run is stored in SyncStates so deploys don't refetch.
     private const string SquadsKey = "squads-synced-at";
     private DateTimeOffset? _squadsSyncedAt;
@@ -148,8 +157,9 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
         // 5. Squads, once a day.
         await SyncSquadsIfDueAsync(now, ct);
 
-        // 6. News, every half hour.
+        // 6. News: the league feed every half hour, plus a rolling sweep of each club's own feed.
         await SyncNewsIfDueAsync(now, ct);
+        await SweepClubNewsAsync(now, ct);
 
         foreach (var stale in _lastDetail.Where(kv => now - kv.Value > TimeSpan.FromDays(1)).Select(kv => kv.Key).ToList())
             _lastDetail.Remove(stale);
@@ -307,6 +317,57 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
         await WriteStateAsync(NewsKey, now.ToString("O", CultureInfo.InvariantCulture), now, ct);
         _newsSyncedAt = now;
         log.LogInformation("News synced ({Articles} articles)", articles);
+    }
+
+    /// <summary>
+    /// Walks every club's own news feed, ClubNewsPerTick clubs at a time, then rests until
+    /// ClubNewsInterval has passed. The queue is in memory: a restart mid-sweep just starts the
+    /// sweep again once the interval is up, which costs 20 requests and nothing else.
+    /// </summary>
+    private async Task SweepClubNewsAsync(DateTimeOffset now, CancellationToken ct)
+    {
+        if (!_clubNewsMarkLoaded)
+        {
+            _clubNewsSweptAt = DateTimeOffset.TryParse(await ReadStateAsync(ClubNewsKey, ct), CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal, out var at) ? at : null;
+            _clubNewsMarkLoaded = true;
+        }
+
+        if (_clubNewsQueue.Count == 0)
+        {
+            if (_clubNewsSweptAt is { } last && now - last < ClubNewsInterval) return;
+
+            List<string> teamIds;
+            await using (var scope = scopes.CreateAsyncScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<MatchdayDbContext>();
+                teamIds = await db.Standings.AsNoTracking().OrderBy(s => s.Position)
+                    .Select(s => s.Team.ProviderId).ToListAsync(ct);
+            }
+            if (teamIds.Count == 0) return; // standings not synced yet; try next tick
+
+            foreach (var id in teamIds) _clubNewsQueue.Enqueue(id);
+            log.LogInformation("Club news sweep started ({Clubs} clubs)", teamIds.Count);
+        }
+
+        for (var i = 0; i < ClubNewsPerTick && _clubNewsQueue.Count > 0; i++)
+        {
+            var teamId = _clubNewsQueue.Dequeue();
+            try
+            {
+                await WithSync(s => s.SyncNewsAsync(teamId, NewsLimit, ct));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                log.LogWarning(ex, "News sync failed for team {TeamId}", teamId);
+            }
+        }
+
+        if (_clubNewsQueue.Count > 0) return;
+
+        await WriteStateAsync(ClubNewsKey, now.ToString("O", CultureInfo.InvariantCulture), now, ct);
+        _clubNewsSweptAt = now;
+        log.LogInformation("Club news sweep complete");
     }
 
     private async Task<string?> ReadStateAsync(string key, CancellationToken ct)

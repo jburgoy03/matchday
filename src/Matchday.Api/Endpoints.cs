@@ -217,7 +217,7 @@ public static class Endpoints
 
         var teamGoals = await GoalsByMatchAsync(db, matches.Select(m => m.Id).ToList(), ct);
         var stats = await SeasonStatsAsync(db, id, seasonStartUtc, ct);
-        var news = await NewsAsync(db, id, 12, ct);
+        var news = await NewsAsync(db, id, 20, ct);
 
         return Results.Ok(new TeamPageDto(
             ToTeam(team), venue, table.Select(ToStanding).ToList(),

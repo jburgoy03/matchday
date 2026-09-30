@@ -215,10 +215,17 @@ public sealed class MatchSyncService(
             .Where(a => providerIds.Contains(a.ProviderId))
             .ToDictionaryAsync(a => a.ProviderId, ct);
 
-        var taggedIds = items.SelectMany(i => i.TeamProviderIds).Distinct().ToList();
+        var taggedIds = items.SelectMany(i => i.TeamProviderIds)
+            .Append(teamProviderId)
+            .OfType<string>()
+            .Distinct()
+            .ToList();
         var teams = await db.Teams
             .Where(t => taggedIds.Contains(t.ProviderId))
             .ToDictionaryAsync(t => t.ProviderId, t => t.Id, ct);
+
+        // A club's own feed always files under that club, even on the odd article that forgets to tag it.
+        var feedTeamId = teamProviderId is not null ? teams.GetValueOrDefault(teamProviderId) : 0;
 
         foreach (var i in items)
         {
@@ -242,6 +249,7 @@ public sealed class MatchSyncService(
             // Re-tagging rather than appending, so a corrected article loses the clubs it no longer mentions.
             var wanted = i.TeamProviderIds
                 .Select(t => teams.TryGetValue(t, out var id) ? id : 0)
+                .Append(feedTeamId)
                 .Where(id => id != 0)
                 .Distinct()
                 .ToList();
