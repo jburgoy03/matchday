@@ -1,21 +1,20 @@
 import type { Incident, MatchListItem } from '../api'
 import { goalSides, isGoalType, type Side } from '../goals'
-import { TeamBadge } from './TeamBadge'
+import { clockPosition } from '../playerEvents'
+import { Ball, CardMark, SubOff, SubOn } from './MatchIcons'
 
-export const ICONS: Record<Incident['type'], string> = {
-  Goal: '⚽',
-  PenaltyGoal: '⚽',
-  OwnGoal: '⚽',
-  YellowCard: '🟨',
-  RedCard: '🟥',
-  Substitution: '🔁',
-  Other: '•',
-}
+/**
+ * The Timeline tab: a match-flow strip (every goal pinned on a 0–90' line, home above, away below)
+ * and a feed down a centre spine. Goals are tinted panels in the scorer's club colour with the
+ * running score; cards and subs are compact lines; half-time and full-time are markers across the
+ * spine. Club colours come from --home / --away on the match page. On phones the feed is one column
+ * with the minute on the left.
+ */
 
 type Score = [number, number]
 
 type Item =
-  | { kind: 'event'; incident: Incident; side: Side; score?: Score }
+  | { kind: 'event'; incident: Incident; side: Side; score?: Score; tag?: string; ownGoalFor?: string }
   | { kind: 'divider'; label: string; score: Score | null }
 
 const isGoal = (i: Incident) => isGoalType(i.type)
@@ -37,6 +36,14 @@ function halfTimeIndex(incidents: Incident[]): number {
   return incidents.length
 }
 
+/** "Brace" on a player's second goal of the match, "Hat-trick" on the third, then "4 goals"… */
+function milestone(n: number): string | undefined {
+  if (n === 2) return 'Brace'
+  if (n === 3) return 'Hat-trick'
+  if (n > 3) return `${n} goals`
+  return undefined
+}
+
 function buildItems(m: MatchListItem, incidents: Incident[]): Item[] {
   const goals = goalSides(m, incidents.filter(isGoal))
   const htAt = halfTimeIndex(incidents)
@@ -47,20 +54,32 @@ function buildItems(m: MatchListItem, incidents: Incident[]): Item[] {
 
   const items: Item[] = []
   const score: Score = [0, 0]
+  const tally = new Map<string, number>()
   incidents.forEach((i, k) => {
-    if (k === htAt && pastHalf) items.push({ kind: 'divider', label: 'HT', score: [...score] })
+    if (k === htAt && pastHalf) items.push({ kind: 'divider', label: 'Half-time', score: [...score] })
     const goalSide = goals.get(i)
     if (goalSide) {
       score[goalSide === 'home' ? 0 : 1]++
-      items.push({ kind: 'event', incident: i, side: goalSide, score: [...score] })
+      let tag: string | undefined
+      let ownGoalFor: string | undefined
+      if (i.type === 'OwnGoal') {
+        // Shown on the side it counts for, naming the club the scorer plays for.
+        ownGoalFor = (goalSide === 'home' ? m.away : m.home).shortName
+      } else {
+        const who = String(i.playerId ?? i.player ?? '')
+        const n = (tally.get(who) ?? 0) + 1
+        tally.set(who, n)
+        tag = milestone(n) ?? (i.type === 'PenaltyGoal' ? 'Pen' : undefined)
+      }
+      items.push({ kind: 'event', incident: i, side: goalSide, score: [...score], tag, ownGoalFor })
     } else {
       items.push({ kind: 'event', incident: i, side: i.teamId === m.away.id ? 'away' : 'home' })
     }
   })
-  if (htAt === incidents.length && pastHalf) items.push({ kind: 'divider', label: 'HT', score: [...score] })
+  if (htAt === incidents.length && pastHalf) items.push({ kind: 'divider', label: 'Half-time', score: [...score] })
   if (m.status === 'FullTime') {
     const final: Score | null = m.homeScore !== null && m.awayScore !== null ? [m.homeScore, m.awayScore] : null
-    items.push({ kind: 'divider', label: 'FT', score: final })
+    items.push({ kind: 'divider', label: 'Full-time', score: final })
   }
   return items
 }
@@ -70,64 +89,142 @@ export function Timeline({ match: m, incidents }: { match: MatchListItem; incide
   if (items.length === 0) return <p className="muted">No events yet.</p>
 
   return (
-    <ol className="timeline card">
-      <li className="tl-head">
-        <span className="tl-side home"><TeamBadge team={m.home} short /></span>
-        <span className="tl-side away"><TeamBadge team={m.away} short /></span>
-      </li>
-      {items.map((it, idx) =>
-        it.kind === 'divider' ? (
-          <li key={idx} className="tl-divider">
-            <span>{it.label}{it.score ? ` ${it.score[0]}–${it.score[1]}` : ''}</span>
-          </li>
-        ) : (
-          <li key={idx} className={`tl-event ${it.score ? 'goal' : ''}`}>
-            <span className="tl-min">
-              {it.incident.clock}
-              {it.score && <span className="tl-score">{it.score[0]}–{it.score[1]}</span>}
-            </span>
-            <span className={`tl-side ${it.side}`}>
-              <EventBody i={it.incident} goal={!!it.score} />
-            </span>
-          </li>
-        )
-      )}
-    </ol>
+    <div className="tlx">
+      <MatchFlow items={items} />
+
+      <section className="tlx-feed card" aria-label="Match events">
+        <div className="tlx-teams">
+          <span className="tlx-team home">{m.home.name}<span className="tlx-swatch home" /></span>
+          <span className="tlx-ko">KO</span>
+          <span className="tlx-team away"><span className="tlx-swatch away" />{m.away.name}</span>
+        </div>
+        <ol className="tlx-list">
+          {items.map((it, idx) =>
+            it.kind === 'divider' ? (
+              <li key={idx} className="tlx-divider">
+                <span className="tlx-divider-pill">
+                  <span className="tlx-divider-label">{it.label}</span>
+                  {it.score && <ScoreChip score={it.score} />}
+                </span>
+              </li>
+            ) : (
+              <EventRow key={idx} item={it} team={it.side === 'home' ? m.home.abbreviation : m.away.abbreviation} />
+            ),
+          )}
+        </ol>
+      </section>
+    </div>
   )
 }
 
-function EventBody({ i, goal }: { i: Incident; goal: boolean }) {
+function ScoreChip({ score, scorer }: { score: Score; scorer?: Side }) {
+  return (
+    <span className="tlx-score" aria-label={`${score[0]}–${score[1]}`}>
+      <span className={scorer === 'home' ? 'home' : ''}>{score[0]}</span>
+      <span className="dash">–</span>
+      <span className={scorer === 'away' ? 'away' : ''}>{score[1]}</span>
+    </span>
+  )
+}
+
+function EventRow({ item, team }: { item: Extract<Item, { kind: 'event' }>; team: string }) {
+  const i = item.incident
   const who = i.player ?? 'Unknown'
+  const side = item.side
+
+  if (item.score) {
+    const assist = i.type === 'Goal' ? i.secondaryPlayer : null
+    const meta = item.ownGoalFor ? `Own goal · ${item.ownGoalFor}` : assist ? `Assist · ${assist}` : null
+    return (
+      <li className={`tlx-row goal ${side}`}>
+        <span className="tlx-min">
+          {i.clock}
+          <span className="tlx-min-score"><ScoreChip score={item.score} scorer={side} /></span>
+        </span>
+        <div className="tlx-body">
+          <Ball ownGoal={i.type === 'OwnGoal'} size={18} />
+          <div className="tlx-text">
+            <span className="tlx-head">
+              <strong>{who}</strong>
+              {item.tag && <span className="tlx-tag">{item.tag}</span>}
+            </span>
+            {meta && <span className="tlx-meta"><span className="tlx-abbr">{team} · </span>{meta}</span>}
+            {!meta && <span className="tlx-meta tlx-abbr-only">{team}</span>}
+          </div>
+          <span className="tlx-body-score"><ScoreChip score={item.score} scorer={side} /></span>
+        </div>
+      </li>
+    )
+  }
 
   if (i.type === 'Substitution') {
     return (
-      <>
-        <span className="tl-icon" aria-label="Substitution">🔁</span>
-        <span className="tl-text">
-          <span><span className="sub-in" aria-label="On">↑</span> {who}</span>
-          {i.secondaryPlayer && <small><span className="sub-out" aria-label="Off">↓</span> {i.secondaryPlayer}</small>}
-        </span>
-      </>
+      <li className={`tlx-row sub ${side}`}>
+        <span className="tlx-min">{i.clock}</span>
+        <div className="tlx-body">
+          <SubOn />
+          <span className="tlx-on">{who}</span>
+          {i.secondaryPlayer && <><SubOff /><span className="tlx-off">{i.secondaryPlayer}</span></>}
+          <span className="tlx-abbr">{team}</span>
+        </div>
+      </li>
     )
   }
 
-  if (goal) {
-    const tag = i.type === 'PenaltyGoal' ? ' (pen)' : i.type === 'OwnGoal' ? ' (OG)' : ''
-    return (
-      <>
-        <span className="tl-icon">{ICONS[i.type]}</span>
-        <span className="tl-text">
-          <strong>{who}{tag}</strong>
-          {i.type === 'Goal' && i.secondaryPlayer && <small>Assist: {i.secondaryPlayer}</small>}
-        </span>
-      </>
-    )
-  }
+  const card = i.type === 'YellowCard' || i.type === 'RedCard'
+  return (
+    <li className={`tlx-row minor ${side}`}>
+      <span className="tlx-min">{i.clock}</span>
+      <div className="tlx-body">
+        {card ? <CardMark red={i.type === 'RedCard'} /> : <span className="tlx-dot" aria-hidden="true" />}
+        <span className="tlx-name">{who}</span>
+        {card && <span className="tlx-kind">{i.type === 'RedCard' ? 'Red card' : 'Yellow card'}</span>}
+        <span className="tlx-abbr">{team}</span>
+      </div>
+    </li>
+  )
+}
+
+/** Goals pinned on a 0–90' line (home above, away below); cards and subs as small marks on it. */
+function MatchFlow({ items }: { items: Item[] }) {
+  const events = items.filter((it): it is Extract<Item, { kind: 'event' }> => it.kind === 'event')
+  const end = Math.max(95, ...events.map(e => (clockPosition(e.incident.clock) ?? 0) + 2))
+  const x = (clock: string) => `${(Math.min(clockPosition(clock) ?? 0, end) / end) * 100}%`
+  const ticks: [number, string][] = [[0, "0'"], [15, "15'"], [30, "30'"], [45, 'HT'], [60, "60'"], [75, "75'"], [90, "90'"]]
 
   return (
-    <>
-      <span className="tl-icon">{ICONS[i.type]}</span>
-      <span className="tl-text"><span>{who}</span></span>
-    </>
+    <section className="tlx-flow card" aria-label="Match flow">
+      <div className="tlx-flow-head">
+        <span className="tlx-flow-title">Match flow</span>
+        <span className="tlx-flow-legend">
+          <span><i className="home" />Home goals</span>
+          <span><i className="away" />Away goals</span>
+        </span>
+      </div>
+      <div className="tlx-flow-plot">
+        <div className="tlx-axis" />
+        <div className="tlx-ht" style={{ left: `${(45 / end) * 100}%` }} />
+        {events.map((e, k) => {
+          const i = e.incident
+          const left = x(i.clock)
+          if (e.score) {
+            return (
+              <span key={k} className={`tlx-pin ${e.side}`} style={{ left }} title={`${i.clock} ${i.player ?? ''}`}>
+                <span className="tlx-stem" />
+                <span className="tlx-head-dot"><Ball ownGoal={i.type === 'OwnGoal'} size={12} /></span>
+              </span>
+            )
+          }
+          if (i.type === 'YellowCard' || i.type === 'RedCard') {
+            return <span key={k} className={`tlx-card-mark ${e.side} ${i.type === 'RedCard' ? 'red' : ''}`} style={{ left }} title={`${i.clock} ${i.player ?? ''}`} />
+          }
+          if (i.type === 'Substitution') return <span key={k} className="tlx-sub-mark" style={{ left }} />
+          return null
+        })}
+        {ticks.map(([t, label]) => (
+          <span key={t} className={`tlx-tick ${t === 45 ? 'ht' : ''}`} style={{ left: `${(t / end) * 100}%` }}>{label}</span>
+        ))}
+      </div>
+    </section>
   )
 }

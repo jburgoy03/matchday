@@ -59,8 +59,19 @@ export function playerEvents(incidents: Incident[]): Map<number, PlayerEvents> {
   return map
 }
 
-/** "71'" or "45'+2'" → a number for sorting; unknown clocks sort last. */
+/**
+ * "71'" → 71, "45'+2'" → 45.02: stoppage time sorts after the 45th minute but before the 46th.
+ * Unknown clocks sort last.
+ */
 export const clockMinutes = (clock: string | null) => {
   const [base, extra] = (clock ?? '').split('+').map(x => parseInt(x, 10))
-  return Number.isNaN(base) ? 999 : base + (Number.isNaN(extra) ? 0 : extra / 100)
+  if (Number.isNaN(base)) return 999
+  return base + (extra === undefined || Number.isNaN(extra) ? 0 : extra / 100)
+}
+
+/** "45'+4'" → 49: where an event actually falls in the match, for plotting on a time axis. */
+export const clockPosition = (clock: string | null) => {
+  const [base, extra] = (clock ?? '').split('+').map(x => parseInt(x, 10))
+  if (Number.isNaN(base)) return null
+  return base + (extra === undefined || Number.isNaN(extra) ? 0 : extra)
 }

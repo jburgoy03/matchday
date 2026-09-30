@@ -1238,3 +1238,143 @@ button.shirt:hover .shirt-label { background: rgba(9, 18, 13, 0.95); }
   .m-score { font-size: 0.95rem; }
   .m-scorers, .m-venue { display: none; }
 }
+
+/* ---------- Match page: Timeline (flow strip + feed) ----------
+   Club colours come from --home / --away (set on the match page by teamColours.ts). */
+.tlx { display: flex; flex-direction: column; gap: 1rem; }
+
+.tlx-flow { display: flex; flex-direction: column; gap: 0.75rem; padding: 1.1rem 1.4rem 0.9rem; }
+.tlx-flow-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.tlx-flow-title, .tlx-divider-label {
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+}
+.tlx-flow-legend { display: flex; gap: 1rem; font-size: 0.75rem; color: var(--muted); }
+.tlx-flow-legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+.tlx-flow-legend i { width: 10px; height: 10px; border-radius: 50%; }
+.tlx-flow-legend i.home { background: var(--home); }
+.tlx-flow-legend i.away { background: var(--away); }
+
+.tlx-flow-plot { --axis: 52px; --dot: 22px; --stem: 24px; position: relative; height: calc(var(--axis) * 2 + 20px); }
+.tlx-axis { position: absolute; left: 0; right: 0; top: var(--axis); height: 2px; margin-top: -1px; background: var(--border); }
+.tlx-ht { position: absolute; top: 6px; height: calc(var(--axis) * 2 - 12px); border-left: 1px dashed color-mix(in srgb, var(--muted) 45%, transparent); }
+.tlx-pin { position: absolute; display: flex; align-items: center; transform: translateX(-50%); }
+.tlx-pin.home { bottom: calc(100% - var(--axis)); flex-direction: column-reverse; }
+.tlx-pin.away { top: var(--axis); flex-direction: column; }
+.tlx-stem { width: 2px; height: var(--stem); opacity: 0.6; }
+.tlx-pin.home .tlx-stem, .tlx-pin.home .tlx-head-dot { background: var(--home); }
+.tlx-pin.away .tlx-stem, .tlx-pin.away .tlx-head-dot { background: var(--away); }
+.tlx-head-dot {
+  width: var(--dot); height: var(--dot); border-radius: 50%; display: grid; place-items: center;
+  box-shadow: 0 0 0 3px var(--surface);
+}
+.tlx-card-mark { position: absolute; width: 9px; height: 13px; border-radius: 2px; background: #f5c518; transform: translateX(-50%); }
+.tlx-card-mark.red { background: #d0342c; }
+.tlx-card-mark.home { top: calc(var(--axis) - 19px); }
+.tlx-card-mark.away { top: calc(var(--axis) + 6px); }
+.tlx-sub-mark { position: absolute; top: calc(var(--axis) - 4px); width: 2px; height: 8px; background: var(--muted); opacity: 0.7; transform: translateX(-50%); }
+.tlx-tick { position: absolute; top: calc(var(--axis) * 2 + 2px); transform: translateX(-50%); font-size: 0.7rem; color: var(--muted); }
+.tlx-tick.ht { color: var(--text); font-weight: 700; }
+
+/* The feed: home events left of a centre spine, away events right */
+.tlx-feed { padding: 1rem 1.4rem 0.6rem; }
+.tlx-teams, .tlx-row { display: grid; grid-template-columns: minmax(0, 1fr) 84px minmax(0, 1fr); align-items: center; }
+.tlx-teams { padding-bottom: 0.6rem; font-weight: 700; font-size: 0.95rem; }
+.tlx-team { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+.tlx-team.home { justify-content: flex-end; }
+.tlx-swatch { flex-shrink: 0; width: 12px; height: 12px; border-radius: 3px; }
+.tlx-swatch.home { background: var(--home); }
+.tlx-swatch.away { background: var(--away); }
+.tlx-ko { text-align: center; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; color: var(--muted); }
+
+.tlx-list { position: relative; list-style: none; margin: 0; padding: 0 0 0.4rem; }
+.tlx-list::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 1.2rem; width: 2px; margin-left: -1px; background: var(--border); }
+.tlx-row { position: relative; }
+.tlx-row.goal { padding: 6px 0; }
+.tlx-row.minor { padding: 2px 0; }
+.tlx-min {
+  grid-column: 2; grid-row: 1; position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 4px 0; background: var(--surface); font-size: 0.75rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.tlx-row.goal .tlx-min { font-size: 0.82rem; font-weight: 700; color: var(--text); }
+.tlx-body { grid-row: 1; display: flex; align-items: center; gap: 0.6rem; min-width: 0; padding: 6px 1.1rem; }
+.tlx-row.home .tlx-body { grid-column: 1; flex-direction: row-reverse; text-align: right; }
+.tlx-row.away .tlx-body { grid-column: 3; }
+
+.tlx-row.goal .tlx-body { padding: 0.8rem 1.1rem; border-radius: 10px; }
+.tlx-row.goal.home .tlx-body {
+  border-right: 3px solid var(--home);
+  background: linear-gradient(270deg, color-mix(in srgb, var(--home) 18%, transparent), color-mix(in srgb, var(--home) 4%, transparent) 60%, transparent);
+}
+.tlx-row.goal.away .tlx-body {
+  border-left: 3px solid var(--away);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--away) 18%, transparent), color-mix(in srgb, var(--away) 4%, transparent) 60%, transparent);
+}
+.tlx-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.tlx-row.home .tlx-text { align-items: flex-end; }
+.tlx-head { display: inline-flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.tlx-row.home .tlx-head { flex-direction: row-reverse; }
+.tlx-head strong { font-size: 1.05rem; font-weight: 700; }
+.tlx-meta { font-size: 0.8rem; color: var(--muted); }
+.tlx-tag {
+  padding: 2px 8px; border-radius: 999px; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; white-space: nowrap; color: #b88a00; background: rgba(245, 197, 24, 0.16);
+}
+:root[data-theme="dark"] .tlx-tag { color: #f5c518; }
+.tlx-score { display: inline-flex; align-items: baseline; gap: 4px; font-size: 0.95rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--muted); }
+.tlx-score .dash { font-weight: 500; }
+.tlx-score .home { color: var(--home); }
+.tlx-score .away { color: var(--away); }
+.tlx-body-score, .tlx-abbr, .tlx-abbr-only { display: none; }
+
+.tlx-row.sub .tlx-body, .tlx-row.minor .tlx-body { font-size: 0.85rem; color: var(--muted); }
+.tlx-on, .tlx-name { color: var(--text); }
+.tlx-row.minor .tlx-name { font-size: 0.9rem; }
+.tlx-kind { font-size: 0.78rem; }
+.tlx-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+
+.tlx-divider { display: flex; justify-content: center; padding: 1rem 0; }
+.tlx-divider-pill {
+  position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 0.8rem; padding: 0.45rem 1.1rem;
+  border-radius: 999px; border: 1px solid var(--border); background: var(--bg);
+}
+.tlx-divider-pill .tlx-score { color: var(--text); }
+
+/* Phones: one column, minute on the left, a club-colour edge for the side */
+@media (max-width: 640px) {
+  .tlx-flow { padding: 0.9rem 0.9rem 0.7rem; }
+  .tlx-flow-legend { display: none; }
+  .tlx-flow-plot { --axis: 40px; --dot: 18px; --stem: 16px; }
+  .tlx-feed { padding: 0.5rem 0.75rem; }
+  .tlx-teams, .tlx-list::before { display: none; }
+  .tlx-row { grid-template-columns: 2.4rem minmax(0, 1fr); column-gap: 0.6rem; }
+  .tlx-min { grid-column: 1; align-items: flex-end; background: none; padding: 0; }
+  .tlx-min-score { display: none; }
+  .tlx-row.home .tlx-body, .tlx-row.away .tlx-body { grid-column: 2; flex-direction: row; text-align: left; }
+  .tlx-row.home .tlx-text { align-items: flex-start; }
+  .tlx-row.home .tlx-head { flex-direction: row; }
+  .tlx-body { padding: 4px 0.75rem; border-left: 3px solid color-mix(in srgb, var(--home) 40%, transparent); }
+  .tlx-row.away .tlx-body { border-left-color: color-mix(in srgb, var(--away) 40%, transparent); }
+  .tlx-row.goal.home .tlx-body, .tlx-row.goal.away .tlx-body {
+    border-right: 0; padding: 0.65rem 0.75rem; border-radius: 10px;
+  }
+  .tlx-row.goal.home .tlx-body {
+    border-left: 3px solid var(--home);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--home) 20%, transparent), color-mix(in srgb, var(--home) 4%, transparent) 70%);
+  }
+  .tlx-row.goal.away .tlx-body {
+    border-left: 3px solid var(--away);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--away) 20%, transparent), color-mix(in srgb, var(--away) 4%, transparent) 70%);
+  }
+  .tlx-text { flex-grow: 1; }
+  .tlx-head strong { font-size: 0.97rem; }
+  .tlx-body-score { display: inline-flex; margin-left: auto; }
+  .tlx-body-score .tlx-score { font-size: 1.2rem; }
+  .tlx-abbr, .tlx-abbr-only { display: inline; }
+  /* Cards and subs: the coloured edge already says which side, so no club code or "Yellow card" text */
+  .tlx-row.sub .tlx-abbr, .tlx-row.minor .tlx-abbr, .tlx-kind { display: none; }
+  .tlx-row.sub .tlx-body { flex-wrap: wrap; row-gap: 2px; }
+  .tlx-on, .tlx-off, .tlx-name { white-space: nowrap; }
+  .tlx-tag { font-size: 0.62rem; padding: 1px 6px; }
+  .tlx-divider { justify-content: stretch; padding: 0.6rem 0; }
+  .tlx-divider-pill { width: 100%; justify-content: space-between; border-radius: 10px; }
+}
