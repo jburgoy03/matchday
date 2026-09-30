@@ -11,6 +11,9 @@ import { NewsList, NewsLead, NewsRow } from '../components/NewsList'
 import { PlayerName, useOpenPlayer } from '../components/PlayerProfile'
 import { CompetitionChip, competitionName } from '../competitions'
 
+/** The table page showing this competition: the Premier League by default, a UEFA league phase by ?comp=. */
+const tablePath = (competition: string) => (competition === 'eng.1' ? '/table' : `/table?comp=${competition}`)
+
 type Tab = 'overview' | 'matches' | 'squad' | 'stats' | 'news'
 type Result = 'W' | 'D' | 'L'
 
@@ -102,7 +105,7 @@ export default function TeamPage({ teamId }: { teamId?: string }) {
         <ClubHero team={team} venue={venue} standing={standing} results={results} />
       ) : (
         <>
-          <BackLink to="/table" label="Table" />
+          <BackLink to={tablePath(tableCompetition)} label="Table" />
           <div className="team-head card">
             <Crest team={team} size={72} />
             <div className="team-name">
@@ -427,7 +430,7 @@ function MiniTable({ team, table, competition }: { team: Team; table: Standing[]
           </Link>
         ))}
       </div>
-      <Link to={competition === 'eng.1' ? '/table' : `/table?comp=${competition}`} className="tp-more">
+      <Link to={tablePath(competition)} className="tp-more">
         <span>View full table</span>
         <ChevronRight size={16} />
       </Link>
