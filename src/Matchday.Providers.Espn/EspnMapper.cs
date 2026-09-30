@@ -112,6 +112,17 @@ public static partial class EspnMapper
             teams);
     }
 
+    /// <summary>teams/{id}/schedule (league "all") → one summary per match, each tagged with its competition slug.</summary>
+    public static IReadOnlyList<MatchSummary> MapTeamSchedule(JsonElement root) =>
+        root.Arr("events")
+            .Where(e => e.Str("id") is not null && e.Arr("competitions").Any())
+            .Select(e =>
+            {
+                var comp = e.Arr("competitions").First();
+                return MapCompetition(e.Str("id")!, comp, comp.Str("venue", "fullName")) with { Competition = e.Str("league", "slug") };
+            })
+            .ToList();
+
     private static MatchSummary MapCompetition(string id, JsonElement comp, string? venue)
     {
         var competitors = comp.Arr("competitors").ToList();

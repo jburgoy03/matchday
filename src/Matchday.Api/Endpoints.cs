@@ -13,10 +13,11 @@ public sealed record TeamDto(int Id, string Name, string ShortName, string Abbre
 /// <summary>A goal in the match list: enough to print "Haaland 12'" under the right team.</summary>
 public sealed record GoalDto(string Type, int? Minute, string Clock, int? TeamId, string? Player);
 
+/// <summary>Competition is the provider's league slug (eng.1, uefa.champions, eng.fa…).</summary>
 public sealed record MatchListItemDto(
     int Id, DateTimeOffset KickoffUtc, string Status, string? Clock,
     TeamDto Home, TeamDto Away, int? HomeScore, int? AwayScore, string? Venue,
-    IReadOnlyList<GoalDto> Goals);
+    IReadOnlyList<GoalDto> Goals, string Competition);
 
 public sealed record LineupPlayerDto(int PlayerId, string Name, string? Jersey, string? Position, bool Starter, int? FormationPlace);
 
@@ -154,10 +155,13 @@ public static class Endpoints
             m.AwayStats));
     }
 
-    private static async Task<IResult> GetStandings(MatchdayDbContext db, CancellationToken ct)
+    /// <summary>One competition's table: the Premier League by default, or a UEFA league phase (?competition=uefa.champions).</summary>
+    private static async Task<IResult> GetStandings(MatchdayDbContext db, string? competition, CancellationToken ct)
     {
+        var comp = string.IsNullOrWhiteSpace(competition) ? Competitions.PremierLeague : competition;
         var rows = await db.Standings.AsNoTracking()
             .Include(s => s.Team)
+            .Where(s => s.Competition == comp)
             .OrderBy(s => s.Position)
             .ToListAsync(ct);
 
@@ -184,6 +188,7 @@ public static class Endpoints
 
         var table = await db.Standings.AsNoTracking()
             .Include(s => s.Team)
+            .Where(s => s.Competition == Competitions.PremierLeague)
             .OrderBy(s => s.Position)
             .ToListAsync(ct);
 
@@ -194,7 +199,8 @@ public static class Endpoints
             .Select(g => g.Key)
             .FirstOrDefault();
 
-        var finishedIds = matches.Where(m => m.Status == MatchStatus.FullTime).Select(m => m.Id).ToList();
+        // Squad numbers are league only, like the leaders and the player popup; cup and European games don't count.
+        var finishedIds = matches.Where(m => m.Status == MatchStatus.FullTime && m.Competition == Competitions.PremierLeague).Select(m => m.Id).ToList();
 
         var members = await db.SquadMembers.AsNoTracking()
             .Include(s => s.Player)
@@ -276,7 +282,7 @@ public static class Endpoints
     private static async Task<SeasonStatsDto?> SeasonStatsAsync(MatchdayDbContext db, int teamId, DateTimeOffset fromUtc, CancellationToken ct)
     {
         var rows = await db.Matches.AsNoTracking()
-            .Where(m => m.Status == MatchStatus.FullTime && m.KickoffUtc >= fromUtc && m.HomeStats != null && m.AwayStats != null)
+            .Where(m => m.Status == MatchStatus.FullTime && m.Competition == Competitions.PremierLeague && m.KickoffUtc >= fromUtc && m.HomeStats != null && m.AwayStats != null)
             .Select(m => new { m.HomeTeamId, m.AwayTeamId, m.HomeStats, m.AwayStats })
             .ToListAsync(ct);
 
@@ -331,7 +337,7 @@ public static class Endpoints
 
         var rows = await db.Incidents.AsNoTracking()
             .Where(i => i.PrimaryPlayerId != null
-                        && db.Matches.Any(m => m.Id == i.MatchId && m.KickoffUtc >= seasonStartUtc))
+                        && db.Matches.Any(m => m.Id == i.MatchId && m.KickoffUtc >= seasonStartUtc && m.Competition == Competitions.PremierLeague))
             .Select(i => new { i.Type, i.PrimaryPlayerId, i.SecondaryPlayerId, i.TeamId })
             .ToListAsync(ct);
 
@@ -371,7 +377,7 @@ public static class Endpoints
         var limit = Math.Clamp(top ?? 5, 1, 50);
 
         var events = await db.Incidents.AsNoTracking()
-            .Where(i => db.Matches.Any(m => m.Id == i.MatchId && m.KickoffUtc >= seasonStartUtc))
+            .Where(i => db.Matches.Any(m => m.Id == i.MatchId && m.KickoffUtc >= seasonStartUtc && m.Competition == Competitions.PremierLeague))
             .Select(i => new { i.MatchId, i.Type, i.PrimaryPlayerId, i.SecondaryPlayerId, i.TeamId })
             .ToListAsync(ct);
 
@@ -391,7 +397,7 @@ public static class Endpoints
 
         // Clean sheets: the starting keeper in a finished match, opponents on zero, not substituted.
         var finished = await db.Matches.AsNoTracking()
-            .Where(m => m.KickoffUtc >= seasonStartUtc && m.Status == MatchStatus.FullTime)
+            .Where(m => m.KickoffUtc >= seasonStartUtc && m.Status == MatchStatus.FullTime && m.Competition == Competitions.PremierLeague)
             .Select(m => new { m.Id, m.HomeTeamId, m.HomeScore, m.AwayScore })
             .ToDictionaryAsync(m => m.Id, ct);
         var finishedIds = finished.Keys.ToList();
@@ -453,7 +459,7 @@ public static class Endpoints
 
         // Same rules as the squad tab: finished matches only; an appearance is a start or coming on.
         var finished = await db.Matches.AsNoTracking()
-            .Where(m => m.KickoffUtc >= seasonStartUtc && m.Status == MatchStatus.FullTime)
+            .Where(m => m.KickoffUtc >= seasonStartUtc && m.Status == MatchStatus.FullTime && m.Competition == Competitions.PremierLeague)
             .Select(m => new { m.Id, m.KickoffUtc, m.HomeTeamId, m.HomeScore, m.AwayScore })
             .ToDictionaryAsync(m => m.Id, ct);
         var finishedIds = finished.Keys.ToList();
@@ -553,7 +559,7 @@ public static class Endpoints
 
     private static MatchListItemDto ToListItem(Match m, IReadOnlyList<GoalDto> goals) => new(
         m.Id, m.KickoffUtc, m.Status.ToString(), m.ClockDisplay,
-        ToTeam(m.HomeTeam), ToTeam(m.AwayTeam), m.HomeScore, m.AwayScore, m.Venue, goals);
+        ToTeam(m.HomeTeam), ToTeam(m.AwayTeam), m.HomeScore, m.AwayScore, m.Venue, goals, m.Competition);
 
     private static TeamDto ToTeam(Team t) => new(t.Id, t.Name, t.ShortName, t.Abbreviation, t.LogoUrl,
         t.Color is null ? null : $"#{t.Color}", t.AlternateColor is null ? null : $"#{t.AlternateColor}");

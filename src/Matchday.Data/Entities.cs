@@ -1,3 +1,4 @@
+using Matchday.Core;
 using Matchday.Core.Providers;
 
 namespace Matchday.Data.Entities;
@@ -29,6 +30,8 @@ public class Match
 {
     public int Id { get; set; }
     public required string ProviderId { get; set; }
+    /// <summary>The provider's league slug: eng.1, uefa.champions, eng.fa… See Core's Competitions.</summary>
+    public string Competition { get; set; } = Competitions.PremierLeague;
     public DateTimeOffset KickoffUtc { get; set; }
     public MatchStatus Status { get; set; }
     public string? ClockDisplay { get; set; }
@@ -147,6 +150,8 @@ public class SyncState
 public class StandingEntry
 {
     public int Id { get; set; }
+    /// <summary>Which table: eng.1, or a UEFA league phase. See Core's Competitions.WithTables.</summary>
+    public string Competition { get; set; } = Competitions.PremierLeague;
     public int TeamId { get; set; }
     public Team Team { get; set; } = null!;
     public int Position { get; set; }

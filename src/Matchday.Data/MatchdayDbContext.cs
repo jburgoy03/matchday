@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Matchday.Core;
 using Matchday.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -42,6 +43,7 @@ public class MatchdayDbContext(DbContextOptions<MatchdayDbContext> options) : Db
         {
             e.HasIndex(x => x.ProviderId).IsUnique();
             e.HasIndex(x => x.KickoffUtc);
+            e.Property(x => x.Competition).HasMaxLength(40).HasDefaultValue(Competitions.PremierLeague);
             e.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             e.Property(x => x.HomeStats).HasColumnType("jsonb").HasConversion(StatsConverter, StatsComparer);
             e.Property(x => x.AwayStats).HasColumnType("jsonb").HasConversion(StatsConverter, StatsComparer);
@@ -99,7 +101,8 @@ public class MatchdayDbContext(DbContextOptions<MatchdayDbContext> options) : Db
 
         b.Entity<StandingEntry>(e =>
         {
-            e.HasIndex(x => x.TeamId).IsUnique();
+            e.Property(x => x.Competition).HasMaxLength(40).HasDefaultValue(Competitions.PremierLeague);
+            e.HasIndex(x => new { x.Competition, x.TeamId }).IsUnique();
             e.HasOne(x => x.Team).WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Restrict);
         });
     }

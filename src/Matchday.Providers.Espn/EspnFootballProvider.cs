@@ -18,16 +18,35 @@ public sealed class EspnFootballProvider(HttpClient http) : IFootballProvider
         return EspnMapper.MapScoreboard(doc!.RootElement);
     }
 
-    public async Task<MatchDetail?> GetMatchDetailAsync(string matchId, CancellationToken ct = default)
+    public Task<MatchDetail?> GetMatchDetailAsync(string matchId, CancellationToken ct = default) =>
+        GetMatchDetailAsync(matchId, League, ct);
+
+    // The summary lives under the match's own competition (a Champions League match isn't under eng.1).
+    public async Task<MatchDetail?> GetMatchDetailAsync(string matchId, string competition, CancellationToken ct = default)
     {
-        using var doc = await GetJsonAsync($"apis/site/v2/sports/soccer/{League}/summary?event={Uri.EscapeDataString(matchId)}", nullOnMissing: true, ct);
+        var league = string.IsNullOrWhiteSpace(competition) ? League : competition;
+        using var doc = await GetJsonAsync(
+            $"apis/site/v2/sports/soccer/{Uri.EscapeDataString(league)}/summary?event={Uri.EscapeDataString(matchId)}", nullOnMissing: true, ct);
         return doc is null ? null : EspnMapper.MapSummary(doc.RootElement, matchId);
     }
 
-    public async Task<IReadOnlyList<StandingRow>> GetStandingsAsync(CancellationToken ct = default)
+    // "all" returns a club's matches in every competition; fixture=true switches from results to what's to come.
+    public async Task<IReadOnlyList<MatchSummary>> GetTeamScheduleAsync(string teamId, bool fixtures, CancellationToken ct = default)
     {
-        using var doc = await GetJsonAsync($"apis/v2/sports/soccer/{League}/standings", nullOnMissing: false, ct);
-        return EspnMapper.MapStandings(doc!.RootElement);
+        var path = $"apis/site/v2/sports/soccer/all/teams/{Uri.EscapeDataString(teamId)}/schedule" + (fixtures ? "?fixture=true" : "");
+        using var doc = await GetJsonAsync(path, nullOnMissing: true, ct);
+        return doc is null ? [] : EspnMapper.MapTeamSchedule(doc.RootElement);
+    }
+
+    public Task<IReadOnlyList<StandingRow>> GetStandingsAsync(CancellationToken ct = default) =>
+        GetStandingsAsync(League, ct);
+
+    // The UEFA competitions' league phases come from the same endpoint under their own slug.
+    public async Task<IReadOnlyList<StandingRow>> GetStandingsAsync(string competition, CancellationToken ct = default)
+    {
+        var league = string.IsNullOrWhiteSpace(competition) ? League : competition;
+        using var doc = await GetJsonAsync($"apis/v2/sports/soccer/{Uri.EscapeDataString(league)}/standings", nullOnMissing: league != League, ct);
+        return doc is null ? [] : EspnMapper.MapStandings(doc.RootElement);
     }
 
     public async Task<IReadOnlyList<SquadPlayer>> GetSquadAsync(string teamId, CancellationToken ct = default)

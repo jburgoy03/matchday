@@ -62,6 +62,13 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
     private bool _clubNewsMarkLoaded;
     private readonly Queue<string> _clubNewsQueue = new();
 
+    // Schedules: each club's all-competitions schedule (results + fixtures), which is how cup and
+    // European matches get in. Two requests per club; live scores then come from the detail pulls.
+    private static readonly TimeSpan SchedulesInterval = TimeSpan.FromHours(12);
+    private const string SchedulesKey = "schedules-synced-at";
+    private DateTimeOffset? _schedulesSyncedAt;
+    private bool _schedulesMarkLoaded;
+
     // Squads: every club's roster once a day. The last run is stored in SyncStates so deploys don't refetch.
     private const string SquadsKey = "squads-synced-at";
     private DateTimeOffset? _squadsSyncedAt;
@@ -150,12 +157,25 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
         if (anyFinished || now - _lastStandings >= StandingsInterval)
         {
             await WithSync(async s => { await s.SyncStandingsAsync(ct); return true; });
+            // The European league-phase tables too. A competition out of season just returns nothing.
+            foreach (var competition in Competitions.WithTables.Where(c => c != Competitions.PremierLeague))
+            {
+                try
+                {
+                    await WithSync(async s => { await s.SyncStandingsAsync(ct, competition); return true; });
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    log.LogWarning(ex, "Standings sync failed for {Competition}", competition);
+                }
+            }
             _lastStandings = now;
             log.LogInformation("Standings synced");
         }
 
-        // 5. Squads, once a day.
+        // 5. Squads, once a day; every club's cup and European schedule twice a day.
         await SyncSquadsIfDueAsync(now, ct);
+        anyFinished |= await SyncSchedulesIfDueAsync(now, ct);
 
         // 6. News: the league feed every half hour, plus a rolling sweep of each club's own feed.
         await SyncNewsIfDueAsync(now, ct);
@@ -270,7 +290,7 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
         await using (var scope = scopes.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<MatchdayDbContext>();
-            teamIds = await db.Standings.AsNoTracking().OrderBy(s => s.Position).Select(s => s.Team.ProviderId).ToListAsync(ct);
+            teamIds = await db.Standings.AsNoTracking().Where(s => s.Competition == Competitions.PremierLeague).OrderBy(s => s.Position).Select(s => s.Team.ProviderId).ToListAsync(ct);
         }
         if (teamIds.Count == 0) return; // standings not synced yet; try next tick
 
@@ -290,6 +310,48 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
         await WriteStateAsync(SquadsKey, now.ToString("O", CultureInfo.InvariantCulture), now, ct);
         _squadsSyncedAt = now;
         log.LogInformation("Squads synced ({Teams} clubs, {Players} players)", teamIds.Count, players);
+    }
+
+    /// <summary>
+    /// Each club's all-competitions schedule once per SchedulesInterval: adds Champions League, Europa,
+    /// Conference, FA Cup, League Cup and Community Shield matches (see Competitions). A failure for one
+    /// club doesn't stop the rest. New finished matches arrive without detail, so the detail backfill fills them.
+    /// </summary>
+    private async Task<bool> SyncSchedulesIfDueAsync(DateTimeOffset now, CancellationToken ct)
+    {
+        if (!_schedulesMarkLoaded)
+        {
+            _schedulesSyncedAt = DateTimeOffset.TryParse(await ReadStateAsync(SchedulesKey, ct), CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal, out var at) ? at : null;
+            _schedulesMarkLoaded = true;
+        }
+        if (_schedulesSyncedAt is { } last && now - last < SchedulesInterval) return false;
+
+        List<string> teamIds;
+        await using (var scope = scopes.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MatchdayDbContext>();
+            teamIds = await db.Standings.AsNoTracking().Where(s => s.Competition == Competitions.PremierLeague).OrderBy(s => s.Position).Select(s => s.Team.ProviderId).ToListAsync(ct);
+        }
+        if (teamIds.Count == 0) return false; // standings not synced yet; try next tick
+
+        var anyFinished = false;
+        foreach (var teamId in teamIds)
+        {
+            try
+            {
+                anyFinished |= await WithSync(s => s.SyncTeamScheduleAsync(teamId, ct));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                log.LogWarning(ex, "Schedule sync failed for team {TeamId}", teamId);
+            }
+        }
+
+        await WriteStateAsync(SchedulesKey, now.ToString("O", CultureInfo.InvariantCulture), now, ct);
+        _schedulesSyncedAt = now;
+        log.LogInformation("Club schedules synced ({Teams} clubs)", teamIds.Count);
+        return anyFinished;
     }
 
     /// <summary>Pulls the league news feed once per NewsInterval. A failure is logged and retried next tick.</summary>
@@ -341,7 +403,7 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
             await using (var scope = scopes.CreateAsyncScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<MatchdayDbContext>();
-                teamIds = await db.Standings.AsNoTracking().OrderBy(s => s.Position)
+                teamIds = await db.Standings.AsNoTracking().Where(s => s.Competition == Competitions.PremierLeague).OrderBy(s => s.Position)
                     .Select(s => s.Team.ProviderId).ToListAsync(ct);
             }
             if (teamIds.Count == 0) return; // standings not synced yet; try next tick

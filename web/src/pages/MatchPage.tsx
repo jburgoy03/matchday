@@ -9,6 +9,7 @@ import { Timeline } from '../components/Timeline'
 import { Lineups } from '../components/Lineups'
 import { playerEvents } from '../playerEvents'
 import { matchColourVars } from '../teamColours'
+import { competitionName } from '../competitions'
 import { formatDay, formatTime, isLive, statusLabel } from '../format'
 
 type Tab = 'timeline' | 'stats' | 'lineups'
@@ -65,7 +66,7 @@ export default function MatchPage() {
         </Link>
       </div>
       <p className="meta muted">
-        {formatDay(m.kickoffUtc)} · {formatTime(m.kickoffUtc)} ET{m.venue ? ` · ${m.venue}` : ''}
+        {competitionName(m.competition)} · {formatDay(m.kickoffUtc)} · {formatTime(m.kickoffUtc)} ET{m.venue ? ` · ${m.venue}` : ''}
       </p>
 
       <div className="tabs" role="tablist">

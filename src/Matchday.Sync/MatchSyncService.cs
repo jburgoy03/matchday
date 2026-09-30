@@ -1,3 +1,4 @@
+using Matchday.Core;
 using Matchday.Core.Providers;
 using Matchday.Data;
 using Matchday.Data.Entities;
@@ -30,7 +31,11 @@ public sealed class MatchSyncService(
     /// <summary>Refreshes score, lineups and incidents for one match. Returns true if it newly reached full time.</summary>
     public async Task<bool> SyncMatchDetailAsync(string providerId, CancellationToken ct)
     {
-        var detail = await provider.GetMatchDetailAsync(providerId, ct);
+        // The summary is fetched under the match's own competition.
+        var competition = await db.Matches.AsNoTracking()
+            .Where(m => m.ProviderId == providerId).Select(m => m.Competition).FirstOrDefaultAsync(ct)
+            ?? Competitions.PremierLeague;
+        var detail = await provider.GetMatchDetailAsync(providerId, competition, ct);
         if (detail is null)
         {
             log.LogWarning("Provider has no detail for match {MatchId}", providerId);
@@ -117,19 +122,39 @@ public sealed class MatchSyncService(
         return becameFinished;
     }
 
-    public async Task SyncStandingsAsync(CancellationToken ct)
+    /// <summary>
+    /// One club's matches in every followed competition (results and fixtures) from its all-competitions
+    /// schedule. Friendlies and competitions we don't follow are skipped. Returns true if any match newly
+    /// reached full time.
+    /// </summary>
+    public async Task<bool> SyncTeamScheduleAsync(string teamProviderId, CancellationToken ct)
     {
-        var rows = await provider.GetStandingsAsync(ct);
+        var anyFinished = false;
+        foreach (var fixtures in new[] { false, true })
+        {
+            var summaries = await provider.GetTeamScheduleAsync(teamProviderId, fixtures, ct);
+            foreach (var s in summaries.Where(s => Competitions.IsFollowed(s.Competition)))
+                anyFinished |= (await UpsertMatchAsync(s, ct)).BecameFinished;
+        }
+        await db.SaveChangesAsync(ct);
+        return anyFinished;
+    }
+
+    /// <summary>Replaces one competition's table (the Premier League unless told otherwise).</summary>
+    public async Task SyncStandingsAsync(CancellationToken ct, string competition = Competitions.PremierLeague)
+    {
+        var rows = await provider.GetStandingsAsync(competition, ct);
         if (rows.Count == 0) return;
 
         var now = clock.GetUtcNow();
         foreach (var r in rows)
         {
             var team = await UpsertTeamAsync(r.Team, ct);
-            var entry = team.Id == 0 ? null : await db.Standings.FirstOrDefaultAsync(s => s.TeamId == team.Id, ct);
+            var entry = team.Id == 0 ? null
+                : await db.Standings.FirstOrDefaultAsync(s => s.Competition == competition && s.TeamId == team.Id, ct);
             if (entry is null)
             {
-                entry = new StandingEntry { Team = team };
+                entry = new StandingEntry { Team = team, Competition = competition };
                 db.Standings.Add(entry);
             }
             entry.Position = r.Position;
@@ -146,7 +171,7 @@ public sealed class MatchSyncService(
 
         // Drop teams no longer in the table (relegated at season rollover).
         var current = rows.Select(r => r.Team.ProviderId).ToList();
-        await db.Standings.Where(s => !current.Contains(s.Team.ProviderId)).ExecuteDeleteAsync(ct);
+        await db.Standings.Where(s => s.Competition == competition && !current.Contains(s.Team.ProviderId)).ExecuteDeleteAsync(ct);
     }
 
     /// <summary>Replaces one club's squad with the provider's current roster. Returns the number of players stored.</summary>
@@ -289,6 +314,8 @@ public sealed class MatchSyncService(
         match.HomeScore = s.HomeScore;
         match.AwayScore = s.AwayScore;
         match.Venue = s.Venue ?? match.Venue;
+        // Scoreboards are eng.1 and schedules say which competition; a match summary doesn't, so keep what we have.
+        if (s.Competition is not null) match.Competition = s.Competition;
         match.UpdatedAt = clock.GetUtcNow();
 
         return (match, !wasFinished && s.Status == MatchStatus.FullTime);

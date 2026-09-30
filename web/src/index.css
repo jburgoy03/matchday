@@ -1173,3 +1173,33 @@ button.shirt:hover .shirt-label { background: rgba(9, 18, 13, 0.95); }
   .row-btn, .row-chev, .shirt-num, .tp-squad tr.row-click { transition: none; }
   button.shirt:hover .shirt-num { transform: none; }
 }
+
+/* ---------- Competition picker (matches rail, table page) ---------- */
+.comp-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+.comp-picker button {
+  min-height: 36px; padding: 0.35rem 0.8rem; border: 1px solid var(--border); border-radius: 999px;
+  background: transparent; color: var(--muted); font: inherit; font-size: 0.85rem; white-space: nowrap; cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.comp-picker button:hover { color: var(--text); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.comp-picker button[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
+.comp-picker button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.table-page > .comp-picker { margin: -0.25rem 0 1rem; }
+/* The rail on desktop: one per line, like a menu */
+@media (min-width: 1201px) {
+  .rail-comp .comp-picker { flex-direction: column; flex-wrap: nowrap; }
+  .rail-comp .comp-picker button { text-align: left; border-radius: 9px; }
+}
+/* Phones: one row that scrolls sideways */
+@media (max-width: 560px) {
+  .comp-picker { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: -0.75rem; padding-inline: 0.75rem; }
+  .comp-picker::-webkit-scrollbar { display: none; }
+}
+
+/* UEFA league-phase zones on the table page */
+.standings tr.ko td:first-child { box-shadow: inset 3px 0 0 var(--ucl); }
+.standings tr.po td:first-child { box-shadow: inset 3px 0 0 var(--uel); }
+.standings tr.out td:first-child { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--muted) 50%, transparent); }
+.swatch.ko { background: var(--ucl); }
+.swatch.po { background: var(--uel); }
+.swatch.out { background: color-mix(in srgb, var(--muted) 50%, transparent); }

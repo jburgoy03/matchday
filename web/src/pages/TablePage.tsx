@@ -1,10 +1,11 @@
-import { Link, useNavigate } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { api } from '../api'
 import { useApi } from '../useApi'
 import { teamPath } from '../teamPath'
 import { NewsList } from '../components/NewsList'
+import { CompetitionPicker, competitionName, PREMIER_LEAGUE, WITH_TABLES } from '../competitions'
 
-type Zone = 'ucl' | 'uel' | 'uecl' | 'rel'
+type Zone = 'ucl' | 'uel' | 'uecl' | 'rel' | 'ko' | 'po' | 'out'
 
 /**
  * The standard Premier League allocation: top four to the Champions League, fifth to the Europa
@@ -22,17 +23,45 @@ function zone(position: number): Zone | undefined {
 /** Last row of each zone, so a divider can mark where one ends. */
 const ZONE_END = new Set([4, 5, 6, 17])
 
+/**
+ * UEFA league phases (36 clubs): the top eight go straight to the round of 16, 9th–24th play a
+ * knockout play-off, 25th and below are out.
+ */
+function uefaZone(position: number): Zone {
+  if (position <= 8) return 'ko'
+  if (position <= 24) return 'po'
+  return 'out'
+}
+const UEFA_ZONE_END = new Set([8, 24])
+
 export default function TablePage() {
-  const { data, error } = useApi(api.standings, [])
+  const [params, setParams] = useSearchParams()
+  const requested = params.get('comp') ?? PREMIER_LEAGUE
+  const comp = WITH_TABLES.includes(requested) ? requested : PREMIER_LEAGUE
+  const league = comp === PREMIER_LEAGUE
+
+  const { data, error } = useApi(signal => api.standings(signal, comp), [comp])
   const { data: news } = useApi(signal => api.news(6, signal), [])
   const navigate = useNavigate()
 
-  if (error) return <p className="error">Couldn't load the table: {error}</p>
-  if (!data) return <p className="muted">Loading…</p>
+  const pick = (slug: string) => {
+    const next = new URLSearchParams(params)
+    if (slug === PREMIER_LEAGUE) next.delete('comp')
+    else next.set('comp', slug)
+    setParams(next, { replace: true })
+  }
+  const zoneOf = (p: number) => (league ? zone(p) : uefaZone(p))
+  const endsZone = (p: number) => (league ? ZONE_END : UEFA_ZONE_END).has(p)
+
+  const picker = <CompetitionPicker options={WITH_TABLES} value={comp} onChange={pick} label="Competition" />
+
+  if (error) return <section className="table-page"><h1>{competitionName(comp)} table</h1>{picker}<p className="error">Couldn't load the table: {error}</p></section>
+  if (!data) return <section className="table-page"><h1>{competitionName(comp)} table</h1>{picker}<p className="muted">Loading…</p></section>
 
   return (
     <section className="table-page">
-      <h1>Premier League table</h1>
+      <h1>{competitionName(comp)} table</h1>
+      {picker}
       <div className="table-layout">
         <div className="table-main">
           <div className="table-wrap">
@@ -55,7 +84,7 @@ export default function TablePage() {
                 {data.map(r => (
                   <tr
                     key={r.team.id}
-                    className={['row-link', zone(r.position), ZONE_END.has(r.position) && 'zone-end'].filter(Boolean).join(' ')}
+                    className={['row-link', zoneOf(r.position), endsZone(r.position) && 'zone-end'].filter(Boolean).join(' ')}
                     onClick={e => {
                       // The team name is a real link (keyboard and middle-click); the rest of the row follows it too.
                       if ((e.target as HTMLElement).closest('a')) return
@@ -86,17 +115,30 @@ export default function TablePage() {
               </tbody>
             </table>
           </div>
-          <ul className="legend muted">
-            <li><span className="swatch ucl" /> Champions League</li>
-            <li><span className="swatch uel" /> Europa League</li>
-            <li><span className="swatch uecl" /> Conference League</li>
-            <li><span className="swatch rel" /> Relegation</li>
-          </ul>
-          <p className="legend-note muted">
-            The usual places. The FA Cup and League Cup winners also qualify for Europe, so if they already
-            finished high enough, those places pass down the table — and England can earn an extra Champions
-            League place through UEFA's season rankings.
-          </p>
+          {data.length === 0 && (
+            <p className="muted">No table yet. It appears once the league phase has started.</p>
+          )}
+          {league ? (
+            <>
+              <ul className="legend muted">
+                <li><span className="swatch ucl" /> Champions League</li>
+                <li><span className="swatch uel" /> Europa League</li>
+                <li><span className="swatch uecl" /> Conference League</li>
+                <li><span className="swatch rel" /> Relegation</li>
+              </ul>
+              <p className="legend-note muted">
+                The usual places. The FA Cup and League Cup winners also qualify for Europe, so if they already
+                finished high enough, those places pass down the table — and England can earn an extra Champions
+                League place through UEFA's season rankings.
+              </p>
+            </>
+          ) : (
+            <ul className="legend muted">
+              <li><span className="swatch ko" /> Round of 16</li>
+              <li><span className="swatch po" /> Knockout play-offs</li>
+              <li><span className="swatch out" /> Eliminated</li>
+            </ul>
+          )}
         </div>
 
         {/* Desktop only: hidden under 1000px by CSS, so phones get the table and nothing else. */}

@@ -9,6 +9,7 @@ import { teamPath } from '../teamPath'
 import { Crest } from '../components/Crest'
 import { NewsList, NewsLead, NewsRow } from '../components/NewsList'
 import { PlayerName, useOpenPlayer } from '../components/PlayerProfile'
+import { CompetitionChip, isLeague } from '../competitions'
 
 type Tab = 'overview' | 'matches' | 'squad' | 'stats' | 'news'
 type Result = 'W' | 'D' | 'L'
@@ -79,7 +80,9 @@ export default function TeamPage({ teamId }: { teamId?: string }) {
 
   const { team, venue, table, matches, squad, stats, news } = data
   const standing = table.find(s => s.team.id === team.id) ?? null
-  const results = matches.map(m => toPlayed(m, team.id)).filter((p): p is Played => p !== null)
+  // Every competition for the Matches tab; form, record and stats stay league only.
+  const allResults = matches.map(m => toPlayed(m, team.id)).filter((p): p is Played => p !== null)
+  const results = allResults.filter(p => isLeague(p.match.competition))
   const upcoming = matches.filter(m => m.status === 'Scheduled' || isLive(m.status))
 
   const tabs: { id: Tab; label: string }[] = [
@@ -137,7 +140,7 @@ export default function TeamPage({ teamId }: { teamId?: string }) {
           onAllNews={() => select('news')}
         />
       )}
-      {tab === 'matches' && <MatchesTab team={team} upcoming={upcoming} results={results} />}
+      {tab === 'matches' && <MatchesTab team={team} upcoming={upcoming} results={allResults} />}
       {tab === 'squad' && <SquadTab squad={squad} />}
       {tab === 'stats' && stats && <StatsTab team={team} stats={stats} results={results} table={table} />}
       {tab === 'news' && <NewsTab news={news} />}
@@ -435,39 +438,18 @@ function MiniTable({ team, table }: { team: Team; table: Standing[] }) {
 function MatchesTab({ team, upcoming, results }: { team: Team; upcoming: MatchListItem[]; results: Played[] }) {
   return (
     <div className="tp-sections">
-      {upcoming.length > 0 && (
-        <section>
-          <h2 className="tp-section-title">Upcoming</h2>
-          <ul className="tp-list card">
-            {upcoming.map(m => {
-              const home = m.home.id === team.id
-              const live = isLive(m.status)
-              return (
-                <li key={m.id}>
-                  <MatchRow
-                    id={m.id}
-                    date={shortDate(m.kickoffUtc)}
-                    home={home}
-                    opponent={home ? m.away : m.home}
-                    right={live ? `${m.homeScore ?? 0}–${m.awayScore ?? 0}` : kickoffTime(m.kickoffUtc)}
-                    rightClass={live ? 'live' : 'muted'}
-                  />
-                </li>
-              )
-            })}
-          </ul>
-        </section>
-      )}
+      {/* The season top to bottom: results so far, oldest first, then what's still to come. */}
       <section>
         <h2 className="tp-section-title">Results</h2>
         {results.length === 0 ? (
           <p className="muted">No results yet this season.</p>
         ) : (
           <ul className="tp-list card">
-            {[...results].reverse().map(p => (
+            {results.map(p => (
               <li key={p.match.id}>
                 <MatchRow
                   id={p.match.id}
+                  competition={p.match.competition}
                   date={shortDate(p.match.kickoffUtc)}
                   home={p.home}
                   opponent={p.opponent}
@@ -480,18 +462,42 @@ function MatchesTab({ team, upcoming, results }: { team: Team; upcoming: MatchLi
           </ul>
         )}
       </section>
+      {upcoming.length > 0 && (
+        <section>
+          <h2 className="tp-section-title">Fixtures</h2>
+          <ul className="tp-list card">
+            {upcoming.map(m => {
+              const home = m.home.id === team.id
+              const live = isLive(m.status)
+              return (
+                <li key={m.id}>
+                  <MatchRow
+                    id={m.id}
+                    competition={m.competition}
+                    date={shortDate(m.kickoffUtc)}
+                    home={home}
+                    opponent={home ? m.away : m.home}
+                    right={live ? `${m.homeScore ?? 0}–${m.awayScore ?? 0}` : kickoffTime(m.kickoffUtc)}
+                    rightClass={live ? 'live' : 'muted'}
+                  />
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
     </div>
   )
 }
 
-function MatchRow({ id, date, home, opponent, right, rightClass, result }: {
-  id: number; date: string; home: boolean; opponent: Team; right: string; rightClass: string; result?: Result
+function MatchRow({ id, competition, date, home, opponent, right, rightClass, result }: {
+  id: number; competition: string; date: string; home: boolean; opponent: Team; right: string; rightClass: string; result?: Result
 }) {
   return (
     <Link to={`/match/${id}`} className="tp-match">
       <span className="tp-date muted">{date}</span>
       <span className="tp-ha" title={home ? 'Home' : 'Away'}>{home ? 'H' : 'A'}</span>
-      <span className="tp-opp"><Crest team={opponent} size={24} /><span>{opponent.name}</span></span>
+      <span className="tp-opp"><Crest team={opponent} size={24} /><span>{opponent.name}</span><CompetitionChip slug={competition} /></span>
       <span className={`tp-right ${rightClass}`}>{right}</span>
       <span className="tp-res">{result && <ResultPill result={result} />}</span>
     </Link>

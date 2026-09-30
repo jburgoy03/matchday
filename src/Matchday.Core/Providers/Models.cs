@@ -29,7 +29,8 @@ public sealed record MatchSummary(
     TeamRef Away,
     int? HomeScore,
     int? AwayScore,
-    string? Venue);
+    string? Venue,
+    string? Competition = null); // league slug (eng.1, uefa.champions…); null = the response didn't say
 
 public sealed record LineupPlayer(
     PlayerRef Player,

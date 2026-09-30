@@ -6,6 +6,7 @@ import { isLive } from '../format'
 import { MatchRow } from '../components/MatchRow'
 import { MatchesSidebar } from '../components/MatchesSidebar'
 import { TeamFilter } from '../components/TeamFilter'
+import { COMPETITION_ORDER, CompetitionPicker, PREMIER_LEAGUE } from '../competitions'
 
 type Show = 'results' | 'fixtures'
 
@@ -76,7 +77,13 @@ export default function MatchesPage() {
 
   if (error) return <p className="error">Couldn't load matches: {error}</p>
 
+  // Competitions that have matches in what's loaded, in the usual order; the Premier League is always offered.
+  const present = COMPETITION_ORDER.filter(c => c === PREMIER_LEAGUE || (source ?? []).some(m => m.competition === c))
+  const requestedComp = params.get('comp') ?? PREMIER_LEAGUE
+  const comp = present.includes(requestedComp) ? requestedComp : PREMIER_LEAGUE
+
   const visible = (source ?? []).filter(m => {
+    if (m.competition !== comp) return false
     const finished = FINISHED.has(m.status)
     return show === 'results' ? finished : !finished
   })
@@ -102,6 +109,12 @@ export default function MatchesPage() {
     <section className="matches-page">
       <div className="matches-layout">
         <div className="matches-rail">
+          {present.length > 1 && (
+            <div className="rail-group rail-comp">
+              <span className="rail-label">Competition</span>
+              <CompetitionPicker options={present} value={comp} onChange={c => set('comp', c, PREMIER_LEAGUE)} label="Competition" />
+            </div>
+          )}
           <div className="rail-group">
             <span className="rail-label">Show</span>
             <div className="segmented" role="group" aria-label="Filter matches">

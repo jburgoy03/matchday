@@ -33,6 +33,8 @@ export interface MatchListItem {
   venue: string | null
   /** Goals only, in order. Cards and subs live on the match page. */
   goals: Goal[]
+  /** ESPN league slug: eng.1, uefa.champions, eng.fa… See competitions.tsx. */
+  competition: string
 }
 
 export interface LineupPlayer {
@@ -223,7 +225,9 @@ export const api = {
   matches: (range?: { from: string; to: string }, signal?: AbortSignal) =>
     get<MatchListItem[]>(range ? `/matches?from=${range.from}&to=${range.to}` : '/matches', signal),
   match: (id: string, signal?: AbortSignal) => get<MatchDetail>(`/matches/${id}`, signal),
-  standings: (signal?: AbortSignal) => get<Standing[]>('/standings', signal),
+  /** The Premier League table, or a UEFA league phase by slug (uefa.champions, uefa.europa, uefa.europa.conf). */
+  standings: (signal?: AbortSignal, competition = 'eng.1') =>
+    get<Standing[]>(competition === 'eng.1' ? '/standings' : `/standings?competition=${encodeURIComponent(competition)}`, signal),
   leaders: (top = 5, signal?: AbortSignal) => get<Leader[]>(`/leaders?top=${top}`, signal),
   leaderboards: (top = 5, signal?: AbortSignal) => get<Leaderboards>(`/leaderboards?top=${top}`, signal),
   player: (id: number, signal?: AbortSignal) => get<PlayerProfile>(`/players/${id}`, signal),
