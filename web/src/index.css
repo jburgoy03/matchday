@@ -145,6 +145,14 @@ h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em; margin: 0.5r
 .matches-head h1 { margin: 0; }
 .matches-list { grid-area: list; min-width: 0; }
 .matches-side { grid-area: side; display: flex; flex-direction: column; gap: 1rem; position: sticky; top: 4.5rem; }
+/* Backstop: if the column is still taller than a short screen, it scrolls on its own
+   instead of waiting for the (whole-season) page to end. Only while it's sticky. */
+@media (min-width: 901px) {
+  .matches-side { max-height: calc(100vh - 5.5rem); overflow-y: auto; scrollbar-width: thin; }
+}
+.side-empty { margin: 0; font-size: 0.85rem; }
+/* Leaderboard tabs: size to their labels so "Clean sheets" stays on one line */
+.side-card .segmented button { flex: 1 1 auto; white-space: nowrap; padding-inline: 0.5rem; }
 
 .rail-label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.5rem; }
 .segmented { display: flex; gap: 2px; padding: 3px; background: var(--border); border-radius: 9px; }

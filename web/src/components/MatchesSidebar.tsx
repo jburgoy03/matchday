@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router'
 import type { Leaderboards, MatchListItem, Standing, Team } from '../api'
 import { ChevronRight } from './Icons'
@@ -23,21 +24,50 @@ interface BoardRow {
   value: number
 }
 
-/** One leaderboard: name, club, number. Hidden when nobody has a number yet. */
-function Board({ title, rows }: { title: string; rows: BoardRow[] }) {
-  if (rows.length === 0) return null
+type BoardKey = 'goals' | 'assists' | 'cleanSheets'
+const BOARD_TABS: { key: BoardKey; label: string }[] = [
+  { key: 'goals', label: 'Goals' },
+  { key: 'assists', label: 'Assists' },
+  { key: 'cleanSheets', label: 'Clean sheets' },
+]
+
+/**
+ * Scorers, assists and clean sheets in one card behind tabs — three separate cards made the
+ * sticky column taller than the screen, so the bottom of it was unreachable until the page ended.
+ */
+function Leaders({ boards }: { boards: Leaderboards }) {
+  const [tab, setTab] = useState<BoardKey>('goals')
+  const rows: Record<BoardKey, BoardRow[]> = {
+    goals: boards.scorers.map(l => ({ ...l, value: l.goals })),
+    assists: boards.assists.map(l => ({ ...l, value: l.assists })),
+    cleanSheets: boards.cleanSheets.map(l => ({ ...l, value: l.cleanSheets })),
+  }
+  if (Object.values(rows).every(r => r.length === 0)) return null
+  const shown = rows[tab]
+
   return (
     <div className="side-card card">
-      <h2>{title}</h2>
-      <div className="side-scorers">
-        {rows.map(r => (
-          <div key={r.playerId} className="side-scorer">
-            <span className="name">{r.name}</span>
-            <span className="muted abbr">{r.team?.abbreviation ?? ''}</span>
-            <strong>{r.value}</strong>
-          </div>
+      <h2>Season leaders</h2>
+      <div className="segmented" role="group" aria-label="Leaderboard">
+        {BOARD_TABS.map(t => (
+          <button key={t.key} type="button" aria-pressed={tab === t.key} onClick={() => setTab(t.key)}>
+            {t.label}
+          </button>
         ))}
       </div>
+      {shown.length === 0 ? (
+        <p className="muted side-empty">Nobody yet.</p>
+      ) : (
+        <div className="side-scorers">
+          {shown.map(r => (
+            <div key={r.playerId} className="side-scorer">
+              <span className="name">{r.name}</span>
+              <span className="muted abbr">{r.team?.abbreviation ?? ''}</span>
+              <strong>{r.value}</strong>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -73,13 +103,7 @@ export function MatchesSidebar({ table, boards, arsenalNext }: {
         </div>
       )}
 
-      {boards && (
-        <>
-          <Board title="Top scorers" rows={boards.scorers.map(l => ({ ...l, value: l.goals }))} />
-          <Board title="Top assists" rows={boards.assists.map(l => ({ ...l, value: l.assists }))} />
-          <Board title="Clean sheets" rows={boards.cleanSheets.map(l => ({ ...l, value: l.cleanSheets }))} />
-        </>
-      )}
+      {boards && <Leaders boards={boards} />}
 
       {arsenalNext && (
         <div className="side-card card">
