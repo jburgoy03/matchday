@@ -84,6 +84,31 @@ public class EspnMapperTests
         Assert.NotNull(dubravka.Nationality);
     }
 
+    /// <summary>
+    /// The feed's contents change daily, so this asserts the shape rather than any one article:
+    /// unique ids, newest first, links that leave the site, and the team tags a story is filed under.
+    /// </summary>
+    [Fact]
+    public void News_maps_articles_newest_first_with_team_tags()
+    {
+        var news = EspnMapper.MapNews(Load("news-eng1.json"));
+
+        Assert.NotEmpty(news);
+        Assert.All(news, n => Assert.False(string.IsNullOrWhiteSpace(n.ProviderId)));
+        Assert.All(news, n => Assert.False(string.IsNullOrWhiteSpace(n.Headline)));
+        Assert.Equal(news.Count, news.Select(n => n.ProviderId).Distinct().Count());
+        Assert.Equal(
+            news.OrderByDescending(n => n.PublishedUtc).Select(n => n.ProviderId),
+            news.Select(n => n.ProviderId));
+
+        Assert.All(news, n => Assert.True(n.WebUrl is null || n.WebUrl.StartsWith("http")));
+        Assert.Contains(news, n => n.WebUrl is not null);
+        Assert.Contains(news, n => n.ImageUrl is not null);
+
+        Assert.Contains(news, n => n.TeamProviderIds.Count > 0);
+        Assert.All(news, n => Assert.Equal(n.TeamProviderIds.Count, n.TeamProviderIds.Distinct().Count()));
+    }
+
     [Fact]
     public void Standings_maps_twenty_teams_in_order()
     {

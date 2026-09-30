@@ -63,6 +63,55 @@ public static partial class EspnMapper
             .DistinctBy(p => p.Player.ProviderId)
             .ToList();
 
+    /// <summary>
+    /// news → articles, newest first. The photo is the widest header image, else the widest with a url.
+    /// categories[] of type "team" is what files a story under a club; ids for clubs outside this
+    /// league come through too and are dropped later, when they fail to match a team we know.
+    /// Articles with no id, headline or date are skipped.
+    /// </summary>
+    public static IReadOnlyList<NewsItem> MapNews(JsonElement root) =>
+        root.Arr("articles")
+            .Select(MapArticle)
+            .OfType<NewsItem>()
+            .DistinctBy(n => n.ProviderId)
+            .OrderByDescending(n => n.PublishedUtc)
+            .ToList();
+
+    private static NewsItem? MapArticle(JsonElement a)
+    {
+        var id = a.Str("id");
+        var headline = a.Str("headline");
+        var published = ParseDateOrNull(a.Str("published") ?? a.Str("lastModified"));
+        if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(headline) || published is null) return null;
+
+        var images = a.Arr("images")
+            .Where(i => i.Str("url") is not null)
+            .OrderByDescending(i => i.Str("type") == "header")
+            .ThenByDescending(i => i.Int("width") ?? 0)
+            .ToList();
+
+        var teams = a.Arr("categories")
+            .Where(c => c.Str("type") == "team")
+            .Select(c => c.Int("teamId")?.ToString(CultureInfo.InvariantCulture) ?? c.Str("team", "id"))
+            .Where(t => !string.IsNullOrEmpty(t))
+            .Select(t => t!)
+            .Distinct()
+            .ToList();
+
+        return new NewsItem(
+            id,
+            headline,
+            a.Str("description"),
+            a.Str("byline"),
+            published.Value,
+            a.Str("type"),
+            a.Bool("premium"),
+            images.Count > 0 ? images[0].Str("url") : null,
+            images.Count > 0 ? images[0].Str("credit") : null,
+            a.Str("links", "web", "href"),
+            teams);
+    }
+
     private static MatchSummary MapCompetition(string id, JsonElement comp, string? venue)
     {
         var competitors = comp.Arr("competitors").ToList();
@@ -166,6 +215,10 @@ public static partial class EspnMapper
         if (m.Success) return int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
         return seconds is { } s ? (int)Math.Ceiling(s / 60.0) : null;
     }
+
+    private static DateTimeOffset? ParseDateOrNull(string? s) =>
+        DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var v) ? v : null;
 
     private static DateTimeOffset ParseDate(string? s) =>
         DateTimeOffset.Parse(s ?? throw new FormatException("Missing match date"),

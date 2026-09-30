@@ -1,8 +1,11 @@
 import { Link, useNavigate } from 'react-router'
-import { api } from '../api'
+import { api, type News } from '../api'
 import { useApi } from '../useApi'
 import { TeamBadge } from '../components/TeamBadge'
 import { teamPath } from '../teamPath'
+import { ExternalLink } from '../components/Icons'
+import { newsAge, NewsImage } from '../components/NewsList'
+import { useState } from 'react'
 
 function zone(position: number) {
   if (position <= 4) return 'ucl'
@@ -12,7 +15,11 @@ function zone(position: number) {
 
 export default function TablePage() {
   const { data, error } = useApi(api.standings, [])
+  const { data: news } = useApi(signal => api.news(6, signal), [])
   const navigate = useNavigate()
+
+  // One story above the table, and it needs the photo to carry its weight.
+  const story = news?.find(n => n.imageUrl) ?? news?.[0] ?? null
 
   if (error) return <p className="error">Couldn't load the table: {error}</p>
   if (!data) return <p className="muted">Loading…</p>
@@ -20,6 +27,7 @@ export default function TablePage() {
   return (
     <section className="table-page">
       <h1>Premier League table</h1>
+      {story && <BiggestStory item={story} />}
       <div className="table-wrap">
         <table className="standings">
           <thead>
@@ -70,5 +78,33 @@ export default function TablePage() {
         <span className="swatch ucl" /> Champions League places <span className="swatch rel" /> Relegation
       </p>
     </section>
+  )
+}
+
+/** The one league story that gets space above the table: photo left, headline right. */
+function BiggestStory({ item }: { item: News }) {
+  const [hasShot, setHasShot] = useState(item.imageUrl !== null)
+  return (
+    <a
+      className={`story card ${hasShot ? '' : 'no-shot'}`}
+      href={item.webUrl ?? '#'}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {item.imageUrl && (
+        <NewsImage className="story-shot" src={item.imageUrl} onGone={() => setHasShot(false)} />
+      )}
+      <span className="story-body">
+        <span className="story-kicker">Biggest story</span>
+        <span className="story-head">
+          <strong>{item.headline}</strong>
+          <ExternalLink size={14} />
+        </span>
+        {item.description && <span className="story-desc">{item.description}</span>}
+        <span className="story-meta muted">
+          {[item.byline, newsAge(item.publishedUtc)].filter(Boolean).join(' · ')}
+        </span>
+      </span>
+    </a>
   )
 }

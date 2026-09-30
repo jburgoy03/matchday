@@ -40,9 +40,14 @@ public sealed record SquadPlayerDto(
 /// <summary>Per-match averages of the stored ESPN team stats: this team's, and every side in the league's.</summary>
 public sealed record SeasonStatsDto(int Matches, IReadOnlyDictionary<string, double> Team, IReadOnlyDictionary<string, double> League);
 
+/// <summary>A headline and a link out. We never serve article bodies, and paywalled items never reach here.</summary>
+public sealed record NewsDto(
+    int Id, string Headline, string? Description, string? Byline, DateTimeOffset PublishedUtc,
+    string? ImageUrl, string? ImageCredit, string? WebUrl, IReadOnlyList<int> TeamIds);
+
 public sealed record TeamPageDto(
     TeamDto Team, string? Venue, IReadOnlyList<StandingDto> Table, IReadOnlyList<MatchListItemDto> Matches,
-    IReadOnlyList<SquadPlayerDto> Squad, SeasonStatsDto? Stats);
+    IReadOnlyList<SquadPlayerDto> Squad, SeasonStatsDto? Stats, IReadOnlyList<NewsDto> News);
 
 public static class Endpoints
 {
@@ -56,6 +61,7 @@ public static class Endpoints
         api.MapGet("/standings", GetStandings);
         api.MapGet("/teams/{id:int}", GetTeam);
         api.MapGet("/leaders", GetLeaders);
+        api.MapGet("/news", GetNews);
     }
 
     private static async Task<IResult> GetMatches(
@@ -211,10 +217,37 @@ public static class Endpoints
 
         var teamGoals = await GoalsByMatchAsync(db, matches.Select(m => m.Id).ToList(), ct);
         var stats = await SeasonStatsAsync(db, id, seasonStartUtc, ct);
+        var news = await NewsAsync(db, id, 12, ct);
 
         return Results.Ok(new TeamPageDto(
             ToTeam(team), venue, table.Select(ToStanding).ToList(),
-            matches.Select(m => ToListItem(m, teamGoals.GetValueOrDefault(m.Id, []))).ToList(), squad, stats));
+            matches.Select(m => ToListItem(m, teamGoals.GetValueOrDefault(m.Id, []))).ToList(), squad, stats, news));
+    }
+
+    /// <summary>
+    /// A story tagged with this many clubs or fewer counts as being about them. Above it, it's a
+    /// league round-up (transfer rumours naming half the division), which is noise on a team page.
+    /// </summary>
+    private const int MaxTeamTagsForTeamNews = 4;
+
+    /// <summary>
+    /// Recent news, newest first. With a team id, only stories filed under that club and not
+    /// spread across the league. Paywalled articles are never served — they dead-end at a signup wall.
+    /// </summary>
+    private static async Task<IResult> GetNews(MatchdayDbContext db, int? team, int? top, CancellationToken ct) =>
+        Results.Ok(await NewsAsync(db, team, Math.Clamp(top ?? 10, 1, 50), ct));
+
+    private static async Task<List<NewsDto>> NewsAsync(MatchdayDbContext db, int? teamId, int limit, CancellationToken ct)
+    {
+        var q = db.NewsArticles.AsNoTracking().Include(a => a.Teams).Where(a => !a.Premium);
+        if (teamId is { } id)
+            q = q.Where(a => a.Teams.Any(t => t.TeamId == id) && a.Teams.Count <= MaxTeamTagsForTeamNews);
+
+        var rows = await q.OrderByDescending(a => a.PublishedUtc).Take(limit).ToListAsync(ct);
+        return rows.Select(a => new NewsDto(
+            a.Id, a.Headline, a.Description, a.Byline, a.PublishedUtc,
+            a.ImageUrl, a.ImageCredit, a.WebUrl,
+            a.Teams.Select(t => t.TeamId).ToList())).ToList();
     }
 
     /// <summary>Averages each stored stat over this team's finished matches, and over every side of every finished match.</summary>

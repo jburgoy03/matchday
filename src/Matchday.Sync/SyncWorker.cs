@@ -45,6 +45,14 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
     private DateTimeOffset? _forwardFillDoneAt;
     private bool _forwardFillMarkLoaded;
 
+    // News: one league feed request. Its articles carry the clubs each is tagged with, so a single
+    // call feeds the table page and most team pages; the last run is stored in SyncStates.
+    private static readonly TimeSpan NewsInterval = TimeSpan.FromMinutes(30);
+    private const int NewsLimit = 50;
+    private const string NewsKey = "news-synced-at";
+    private DateTimeOffset? _newsSyncedAt;
+    private bool _newsMarkLoaded;
+
     // Squads: every club's roster once a day. The last run is stored in SyncStates so deploys don't refetch.
     private const string SquadsKey = "squads-synced-at";
     private DateTimeOffset? _squadsSyncedAt;
@@ -139,6 +147,9 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
 
         // 5. Squads, once a day.
         await SyncSquadsIfDueAsync(now, ct);
+
+        // 6. News, every half hour.
+        await SyncNewsIfDueAsync(now, ct);
 
         foreach (var stale in _lastDetail.Where(kv => now - kv.Value > TimeSpan.FromDays(1)).Select(kv => kv.Key).ToList())
             _lastDetail.Remove(stale);
@@ -269,6 +280,33 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
         await WriteStateAsync(SquadsKey, now.ToString("O", CultureInfo.InvariantCulture), now, ct);
         _squadsSyncedAt = now;
         log.LogInformation("Squads synced ({Teams} clubs, {Players} players)", teamIds.Count, players);
+    }
+
+    /// <summary>Pulls the league news feed once per NewsInterval. A failure is logged and retried next tick.</summary>
+    private async Task SyncNewsIfDueAsync(DateTimeOffset now, CancellationToken ct)
+    {
+        if (!_newsMarkLoaded)
+        {
+            _newsSyncedAt = DateTimeOffset.TryParse(await ReadStateAsync(NewsKey, ct), CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal, out var at) ? at : null;
+            _newsMarkLoaded = true;
+        }
+        if (_newsSyncedAt is { } last && now - last < NewsInterval) return;
+
+        int articles;
+        try
+        {
+            articles = await WithSync(s => s.SyncNewsAsync(null, NewsLimit, ct));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogWarning(ex, "News sync failed");
+            return;
+        }
+
+        await WriteStateAsync(NewsKey, now.ToString("O", CultureInfo.InvariantCulture), now, ct);
+        _newsSyncedAt = now;
+        log.LogInformation("News synced ({Articles} articles)", articles);
     }
 
     private async Task<string?> ReadStateAsync(string key, CancellationToken ct)

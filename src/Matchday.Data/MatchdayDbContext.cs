@@ -26,6 +26,8 @@ public class MatchdayDbContext(DbContextOptions<MatchdayDbContext> options) : Db
     public DbSet<StandingEntry> Standings => Set<StandingEntry>();
     public DbSet<SyncState> SyncStates => Set<SyncState>();
     public DbSet<SquadMember> SquadMembers => Set<SquadMember>();
+    public DbSet<NewsArticle> NewsArticles => Set<NewsArticle>();
+    public DbSet<NewsArticleTeam> NewsArticleTeams => Set<NewsArticleTeam>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -67,6 +69,22 @@ public class MatchdayDbContext(DbContextOptions<MatchdayDbContext> options) : Db
             e.Property(x => x.Position).HasMaxLength(4);
             e.HasOne(x => x.Player).WithMany().HasForeignKey(x => x.PlayerId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<Team>().WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<NewsArticle>(e =>
+        {
+            e.HasIndex(x => x.ProviderId).IsUnique();
+            e.HasIndex(x => x.PublishedUtc);
+            e.Property(x => x.Headline).HasMaxLength(400);
+            e.Property(x => x.Type).HasMaxLength(40);
+            e.HasMany(x => x.Teams).WithOne().HasForeignKey(x => x.NewsArticleId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<NewsArticleTeam>(e =>
+        {
+            e.HasIndex(x => new { x.NewsArticleId, x.TeamId }).IsUnique();
+            e.HasIndex(x => x.TeamId);
+            e.HasOne(x => x.Team).WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<SyncState>(e =>

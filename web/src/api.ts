@@ -107,6 +107,20 @@ export interface SeasonStats {
   league: TeamStats
 }
 
+/** A headline and a link out to the publisher. Paywalled articles never reach the browser. */
+export interface News {
+  id: number
+  headline: string
+  description: string | null
+  byline: string | null
+  publishedUtc: string
+  imageUrl: string | null
+  imageCredit: string | null
+  webUrl: string | null
+  /** Every club the article is filed under */
+  teamIds: number[]
+}
+
 export interface TeamPage {
   team: Team
   venue: string | null
@@ -115,6 +129,7 @@ export interface TeamPage {
   matches: MatchListItem[]
   squad: SquadPlayer[]
   stats: SeasonStats | null
+  news: News[]
 }
 
 export interface Leader {
@@ -138,4 +153,5 @@ export const api = {
   standings: (signal?: AbortSignal) => get<Standing[]>('/standings', signal),
   leaders: (top = 5, signal?: AbortSignal) => get<Leader[]>(`/leaders?top=${top}`, signal),
   team: (id: string, signal?: AbortSignal) => get<TeamPage>(`/teams/${id}`, signal),
+  news: (top = 10, signal?: AbortSignal) => get<News[]>(`/news?top=${top}`, signal),
 }

@@ -65,6 +65,23 @@ public sealed record MatchDetail(
     IReadOnlyList<MatchEvent> Events,
     IReadOnlyList<TeamStats> Stats);
 
+/// <summary>
+/// One article from the provider's news feed. We carry the headline and a link out, never the body.
+/// TeamProviderIds is every club the article is tagged with, which is how a story finds a team page.
+/// </summary>
+public sealed record NewsItem(
+    string ProviderId,
+    string Headline,
+    string? Description,
+    string? Byline,
+    DateTimeOffset PublishedUtc,
+    string? Type,
+    bool Premium,
+    string? ImageUrl,
+    string? ImageCredit,
+    string? WebUrl,
+    IReadOnlyList<string> TeamProviderIds);
+
 /// <summary>One player in a club's current squad. Player.Position is G, D, M or F.</summary>
 public sealed record SquadPlayer(
     PlayerRef Player,

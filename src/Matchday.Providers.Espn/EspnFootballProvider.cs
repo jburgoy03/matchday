@@ -36,6 +36,16 @@ public sealed class EspnFootballProvider(HttpClient http) : IFootballProvider
         return doc is null ? [] : EspnMapper.MapRoster(doc.RootElement);
     }
 
+    // The league feed tags every article with the clubs it mentions, so one call feeds both the
+    // table page and most team pages. A team id narrows it to that club's own feed.
+    public async Task<IReadOnlyList<NewsItem>> GetNewsAsync(string? teamId = null, int limit = 50, CancellationToken ct = default)
+    {
+        var path = $"apis/site/v2/sports/soccer/{League}/news?limit={Math.Clamp(limit, 1, 50)}";
+        if (!string.IsNullOrWhiteSpace(teamId)) path += $"&team={Uri.EscapeDataString(teamId)}";
+        using var doc = await GetJsonAsync(path, nullOnMissing: true, ct);
+        return doc is null ? [] : EspnMapper.MapNews(doc.RootElement);
+    }
+
     private async Task<JsonDocument?> GetJsonAsync(string path, bool nullOnMissing, CancellationToken ct)
     {
         using var resp = await http.GetAsync(path, ct);

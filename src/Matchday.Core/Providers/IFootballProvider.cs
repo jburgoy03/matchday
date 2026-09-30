@@ -13,4 +13,7 @@ public interface IFootballProvider
 
     /// <summary>A club's current squad; empty if the provider doesn't know the team.</summary>
     Task<IReadOnlyList<SquadPlayer>> GetSquadAsync(string teamId, CancellationToken ct = default);
+
+    /// <summary>Recent news, newest first. Pass a team id for one club's feed, null for the whole league.</summary>
+    Task<IReadOnlyList<NewsItem>> GetNewsAsync(string? teamId = null, int limit = 50, CancellationToken ct = default);
 }

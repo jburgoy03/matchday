@@ -13,6 +13,9 @@ public sealed class MatchSyncService(
     TimeProvider clock,
     ILogger<MatchSyncService> log)
 {
+    /// <summary>How long a news article is kept before it's pruned.</summary>
+    private static readonly TimeSpan NewsRetention = TimeSpan.FromDays(45);
+
     /// <summary>Upserts every match on one day. Returns true if any match newly reached full time.</summary>
     public async Task<bool> SyncDayAsync(DateOnly date, CancellationToken ct)
     {
@@ -188,6 +191,71 @@ public sealed class MatchSyncService(
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return squad.Count;
+    }
+
+    /// <summary>
+    /// Upserts the provider's latest news and re-tags each article with the clubs it mentions.
+    /// Tags for clubs outside this league are dropped, because they match no team we store.
+    /// Articles past NewsRetention are pruned in the same pass, so the table can't grow forever.
+    /// Returns the number of articles the provider sent.
+    /// </summary>
+    public async Task<int> SyncNewsAsync(string? teamProviderId, int limit, CancellationToken ct)
+    {
+        var items = await provider.GetNewsAsync(teamProviderId, limit, ct);
+        if (items.Count == 0)
+        {
+            log.LogWarning("Provider returned no news for {Feed}", teamProviderId ?? "the league");
+            return 0;
+        }
+
+        var now = clock.GetUtcNow();
+        var providerIds = items.Select(i => i.ProviderId).ToList();
+        var existing = await db.NewsArticles
+            .Include(a => a.Teams)
+            .Where(a => providerIds.Contains(a.ProviderId))
+            .ToDictionaryAsync(a => a.ProviderId, ct);
+
+        var taggedIds = items.SelectMany(i => i.TeamProviderIds).Distinct().ToList();
+        var teams = await db.Teams
+            .Where(t => taggedIds.Contains(t.ProviderId))
+            .ToDictionaryAsync(t => t.ProviderId, t => t.Id, ct);
+
+        foreach (var i in items)
+        {
+            if (!existing.TryGetValue(i.ProviderId, out var article))
+            {
+                article = new NewsArticle { ProviderId = i.ProviderId, Headline = i.Headline };
+                db.NewsArticles.Add(article);
+            }
+
+            article.Headline = i.Headline;
+            article.Description = i.Description;
+            article.Byline = i.Byline;
+            article.PublishedUtc = i.PublishedUtc;
+            article.Type = i.Type;
+            article.Premium = i.Premium;
+            article.ImageUrl = i.ImageUrl;
+            article.ImageCredit = i.ImageCredit;
+            article.WebUrl = i.WebUrl;
+            article.UpdatedAt = now;
+
+            // Re-tagging rather than appending, so a corrected article loses the clubs it no longer mentions.
+            var wanted = i.TeamProviderIds
+                .Select(t => teams.TryGetValue(t, out var id) ? id : 0)
+                .Where(id => id != 0)
+                .Distinct()
+                .ToList();
+
+            article.Teams.RemoveAll(t => !wanted.Contains(t.TeamId));
+            foreach (var teamId in wanted.Where(id => article.Teams.All(t => t.TeamId != id)))
+                article.Teams.Add(new NewsArticleTeam { TeamId = teamId });
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        var cutoff = now - NewsRetention;
+        await db.NewsArticles.Where(a => a.PublishedUtc < cutoff).ExecuteDeleteAsync(ct);
+        return items.Count;
     }
 
     private async Task<(Match Match, bool BecameFinished)> UpsertMatchAsync(MatchSummary s, CancellationToken ct)

@@ -1,14 +1,15 @@
 import { useEffect, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { api, type MatchListItem, type SquadPlayer, type Standing, type Team, type TeamStats } from '../api'
+import { api, type MatchListItem, type News, type SquadPlayer, type Standing, type Team, type TeamStats } from '../api'
 import { useApi } from '../useApi'
 import { isLive } from '../format'
 import { BackLink } from '../components/BackLink'
 import { ChevronRight } from '../components/Icons'
 import { teamPath } from '../teamPath'
 import { Crest } from '../components/Crest'
+import { NewsList, NewsLead, NewsRow } from '../components/NewsList'
 
-type Tab = 'overview' | 'matches' | 'squad' | 'stats'
+type Tab = 'overview' | 'matches' | 'squad' | 'stats' | 'news'
 type Result = 'W' | 'D' | 'L'
 
 /** A finished match from this team's point of view. */
@@ -75,7 +76,7 @@ export default function TeamPage({ teamId }: { teamId?: string }) {
   if (error) return <p className="error">Couldn't load this team: {error}</p>
   if (!data) return <p className="muted">Loading…</p>
 
-  const { team, venue, table, matches, squad, stats } = data
+  const { team, venue, table, matches, squad, stats, news } = data
   const standing = table.find(s => s.team.id === team.id) ?? null
   const results = matches.map(m => toPlayed(m, team.id)).filter((p): p is Played => p !== null)
   const upcoming = matches.filter(m => m.status === 'Scheduled' || isLive(m.status))
@@ -85,6 +86,7 @@ export default function TeamPage({ teamId }: { teamId?: string }) {
     { id: 'matches', label: 'Matches' },
     ...(squad.length > 0 ? [{ id: 'squad' as const, label: 'Squad' }] : []),
     ...(stats ? [{ id: 'stats' as const, label: 'Stats' }] : []),
+    ...(news.length > 0 ? [{ id: 'news' as const, label: 'News' }] : []),
   ]
   const tab: Tab = tabs.find(t => t.id === params.get('tab'))?.id ?? 'overview'
   const select = (t: Tab) => setParams(t === 'overview' ? {} : { tab: t }, { replace: true })
@@ -124,11 +126,20 @@ export default function TeamPage({ teamId }: { teamId?: string }) {
       </div>
 
       {tab === 'overview' && (
-        <Overview team={team} table={table} results={results} next={upcoming[0] ?? null} squad={squad} />
+        <Overview
+          team={team}
+          table={table}
+          results={results}
+          next={upcoming[0] ?? null}
+          squad={squad}
+          news={news}
+          onAllNews={() => select('news')}
+        />
       )}
       {tab === 'matches' && <MatchesTab team={team} upcoming={upcoming} results={results} />}
       {tab === 'squad' && <SquadTab squad={squad} />}
       {tab === 'stats' && stats && <StatsTab team={team} stats={stats} results={results} table={table} />}
+      {tab === 'news' && <NewsTab news={news} />}
     </section>
   )
 }
@@ -195,8 +206,9 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
 
 /* ---------- Overview ---------- */
 
-function Overview({ team, table, results, next, squad }: {
+function Overview({ team, table, results, next, squad, news, onAllNews }: {
   team: Team; table: Standing[]; results: Played[]; next: MatchListItem | null; squad: SquadPlayer[]
+  news: News[]; onAllNews: () => void
 }) {
   const last = results.at(-1) ?? null
   const scorers = squad
@@ -235,7 +247,38 @@ function Overview({ team, table, results, next, squad }: {
             </div>
           </Card>
         )}
+        {news.length > 0 && (
+          <section className="tp-news">
+            <h2 className="tp-section-title">Latest news</h2>
+            <NewsList items={news} max={5} />
+            {news.length > 5 && (
+              <button type="button" className="news-more card" onClick={onAllNews}>
+                <span>More {team.shortName} news</span>
+                <ChevronRight size={16} />
+              </button>
+            )}
+          </section>
+        )}
       </div>
+    </div>
+  )
+}
+
+/* ---------- News ---------- */
+
+/** The fuller list: the lead keeps its photo, everything else is a row. */
+function NewsTab({ news }: { news: News[] }) {
+  return (
+    <div className="tp-sections">
+      <section className="tp-news wide">
+        {news[0].imageUrl && <NewsLead item={news[0]} />}
+        <div className="news-rows card">
+          {news.slice(news[0].imageUrl ? 1 : 0).map(n => <NewsRow key={n.id} item={n} />)}
+        </div>
+        <p className="muted tp-news-note">
+          Headlines from ESPN. Stories open on espn.com.
+        </p>
+      </section>
     </div>
   )
 }

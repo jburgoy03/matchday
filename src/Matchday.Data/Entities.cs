@@ -97,6 +97,39 @@ public class SquadMember
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
+/// <summary>
+/// One article from the provider's news feed. Headline, blurb and a link out only — the body isn't
+/// ours to store or serve. Kept for a few weeks and then pruned.
+/// </summary>
+public class NewsArticle
+{
+    public int Id { get; set; }
+    public required string ProviderId { get; set; }
+    public required string Headline { get; set; }
+    public string? Description { get; set; }
+    public string? Byline { get; set; }
+    public DateTimeOffset PublishedUtc { get; set; }
+    /// <summary>The provider's own label, e.g. Story or HeadlineNews.</summary>
+    public string? Type { get; set; }
+    /// <summary>Behind the provider's paywall. Stored so we can tell, never served.</summary>
+    public bool Premium { get; set; }
+    public string? ImageUrl { get; set; }
+    public string? ImageCredit { get; set; }
+    public string? WebUrl { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    public List<NewsArticleTeam> Teams { get; set; } = [];
+}
+
+/// <summary>A club an article is tagged with; one article usually carries several.</summary>
+public class NewsArticleTeam
+{
+    public int Id { get; set; }
+    public int NewsArticleId { get; set; }
+    public int TeamId { get; set; }
+    public Team Team { get; set; } = null!;
+}
+
 /// <summary>Small key/value store for the worker's progress (e.g. how far the season backfill has got).</summary>
 public class SyncState
 {
