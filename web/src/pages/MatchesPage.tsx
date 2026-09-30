@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { api, type MatchListItem } from '../api'
 import { useApi } from '../useApi'
@@ -7,7 +7,7 @@ import { MatchRow } from '../components/MatchRow'
 import { MatchesSidebar } from '../components/MatchesSidebar'
 import { TeamFilter } from '../components/TeamFilter'
 
-type Show = 'all' | 'results' | 'fixtures'
+type Show = 'results' | 'fixtures'
 
 const ET = 'America/New_York'
 const keyFmt = new Intl.DateTimeFormat('en-CA', { timeZone: ET, year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -35,14 +35,13 @@ const seasonStart = (today: string) => {
 const seasonEnd = (today: string) => `${Number(seasonStart(today).slice(0, 4)) + 1}-06-30`
 
 const FINISHED = new Set(['FullTime', 'Postponed', 'Cancelled'])
-const RECENT_DAYS = 7 // how far back the default view keeps results; older ones live under Results
 
 export default function MatchesPage() {
   const [params, setParams] = useSearchParams()
   const [tick, setTick] = useState(0)
-  const mainRef = useRef<HTMLDivElement>(null)
 
-  const show = (params.get('show') ?? 'all') as Show
+  // Fixtures by default. Old links with ?show=all land on Fixtures too.
+  const show: Show = params.get('show') === 'results' ? 'results' : 'fixtures'
   const teamId = Number(params.get('team') ?? 0) || 0
 
   const today = dayKey(new Date())
@@ -75,20 +74,11 @@ export default function MatchesPage() {
     setParams(next, { replace: true })
   }
 
-  // Scrolls to the day holding the next match (or the live one). CSS scroll-margin keeps the day
-  // heading clear of the sticky site header.
-  const jumpToNext = () => {
-    mainRef.current?.querySelector('[data-next="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
   if (error) return <p className="error">Couldn't load matches: {error}</p>
 
-  const cutoff = shiftKey(today, -RECENT_DAYS)
   const visible = (source ?? []).filter(m => {
     const finished = FINISHED.has(m.status)
-    if (show === 'results') return finished
-    if (show === 'fixtures') return !finished
-    return !finished || dayKey(m.kickoffUtc) >= cutoff // "All" = the last week plus everything ahead
+    return show === 'results' ? finished : !finished
   })
 
   // Group into Eastern days, keeping the API's kickoff order. Results read newest first.
@@ -100,11 +90,6 @@ export default function MatchesPage() {
     else days.push({ key, matches: [m] })
   }
   if (show === 'results') days.reverse()
-
-  // The day to jump to: the first one with a match still to finish (live counts). Only worth a button
-  // when there are earlier days above it — in Fixtures, or once the season's over, there's nowhere to go.
-  const nextDayIdx = show === 'results' ? -1 : days.findIndex(d => d.matches.some(m => !FINISHED.has(m.status)))
-  const canJump = nextDayIdx > 0
 
   const live = visible.filter(m => isLive(m.status))
   const todays = visible.filter(m => dayKey(m.kickoffUtc) === today)
@@ -120,24 +105,17 @@ export default function MatchesPage() {
           <div className="rail-group">
             <span className="rail-label">Show</span>
             <div className="segmented" role="group" aria-label="Filter matches">
-              {(['all', 'results', 'fixtures'] as Show[]).map(v => (
+              {(['fixtures', 'results'] as Show[]).map(v => (
                 <button
                   key={v}
                   type="button"
                   aria-pressed={show === v}
-                  onClick={() => set('show', v, 'all')}
+                  onClick={() => set('show', v, 'fixtures')}
                 >
-                  {v === 'all' ? 'All' : v === 'results' ? 'Results' : 'Fixtures'}
+                  {v === 'results' ? 'Results' : 'Fixtures'}
                 </button>
               ))}
             </div>
-            {canJump && (
-              <div className="rail-buttons">
-                <button type="button" className="rail-btn" onClick={jumpToNext}>
-                  <span>{live.length > 0 ? 'Jump to live' : 'Jump to next match'}</span>
-                </button>
-              </div>
-            )}
           </div>
 
           {table && table.length > 0 && (
@@ -163,9 +141,9 @@ export default function MatchesPage() {
           {loading ? (
             <p className="muted">Loading…</p>
           ) : (
-            <div className="matches-days" ref={mainRef}>
-              {days.map((d, i) => (
-                <section key={d.key} className="match-day" data-next={i === nextDayIdx ? 'true' : undefined}>
+            <div className="matches-days">
+              {days.map(d => (
+                <section key={d.key} className="match-day">
                   <h2 className="day-head">{dayLabel(d.key, today)}</h2>
                   <div className="m-list card">
                     {d.matches.map(m => <MatchRow key={m.id} m={m} />)}

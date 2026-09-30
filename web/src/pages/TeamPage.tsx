@@ -8,7 +8,7 @@ import { ChevronRight } from '../components/Icons'
 import { teamPath } from '../teamPath'
 import { Crest } from '../components/Crest'
 import { NewsList, NewsLead, NewsRow } from '../components/NewsList'
-import { PlayerName } from '../components/PlayerProfile'
+import { PlayerName, useOpenPlayer } from '../components/PlayerProfile'
 
 type Tab = 'overview' | 'matches' | 'squad' | 'stats' | 'news'
 type Result = 'W' | 'D' | 'L'
@@ -508,6 +508,7 @@ const GROUPS: { code: string; title: string }[] = [
 ]
 
 function SquadTab({ squad }: { squad: SquadPlayer[] }) {
+  const open = useOpenPlayer()
   const known = new Set(GROUPS.map(g => g.code))
   const groups = [
     ...GROUPS.map(g => ({ title: g.title, players: squad.filter(p => p.position === g.code) })),
@@ -531,7 +532,12 @@ function SquadTab({ squad }: { squad: SquadPlayer[] }) {
           </thead>
           <tbody>
             {g.players.map(p => (
-              <tr key={p.playerId}>
+              // The whole row opens the profile; the name stays a real button for keyboard users.
+              <tr
+                key={p.playerId}
+                className="row-click"
+                onClick={e => { if (!(e.target as HTMLElement).closest('button')) open(p.playerId) }}
+              >
                 <td><span className="jersey-chip">{p.jersey ?? '–'}</span></td>
                 <td className="name">
                   {p.flagUrl && <img className="flag show-sm" src={p.flagUrl} alt={p.nationality ?? ''} width={18} height={12} />}

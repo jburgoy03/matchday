@@ -4,7 +4,7 @@ import type { Leaderboards, MatchListItem, Standing, Team } from '../api'
 import { ChevronRight } from './Icons'
 import { Crest } from './Crest'
 import { teamPath } from '../teamPath'
-import { PlayerName } from './PlayerProfile'
+import { useOpenPlayer } from './PlayerProfile'
 
 const ET = 'America/New_York'
 const whenFmt = new Intl.DateTimeFormat('en-US', {
@@ -38,6 +38,7 @@ const BOARD_TABS: { key: BoardKey; label: string }[] = [
  */
 function Leaders({ boards }: { boards: Leaderboards }) {
   const [tab, setTab] = useState<BoardKey>('goals')
+  const open = useOpenPlayer()
   const rows: Record<BoardKey, BoardRow[]> = {
     goals: boards.scorers.map(l => ({ ...l, value: l.goals })),
     assists: boards.assists.map(l => ({ ...l, value: l.assists })),
@@ -61,11 +62,12 @@ function Leaders({ boards }: { boards: Leaderboards }) {
       ) : (
         <div className="side-scorers">
           {shown.map(r => (
-            <div key={r.playerId} className="side-scorer">
-              <PlayerName id={r.playerId} className="name">{r.name}</PlayerName>
+            <button key={r.playerId} type="button" className="side-scorer row-btn" onClick={() => open(r.playerId)}>
+              <span className="name">{r.name}</span>
               <span className="muted abbr">{r.team?.abbreviation ?? ''}</span>
               <strong>{r.value}</strong>
-            </div>
+              <span className="row-chev"><ChevronRight size={14} /></span>
+            </button>
           ))}
         </div>
       )}

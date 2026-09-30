@@ -3,7 +3,8 @@ import type { Side } from '../goals'
 import { readingOrder, roleOf, type Spot } from '../formation'
 import { clockMinutes, type PlayerEvents } from '../playerEvents'
 import { EventMarks } from './EventMarks'
-import { PlayerName } from './PlayerProfile'
+import { useOpenPlayer } from './PlayerProfile'
+import { ChevronRight } from './Icons'
 
 /** Every player in the squad for the match: the XI in reading order, then the bench — used subs first. */
 export function LineupList({ lineup, spots, events, side }: {
@@ -52,14 +53,19 @@ function Row({ p, side, role, events, keeper = false, bench = false, unused = fa
   bench?: boolean
   unused?: boolean
 }) {
+  const open = useOpenPlayer()
+  // The whole row is the button: a big target, a hover highlight and a chevron that says "opens something".
   return (
-    <li className={`lu-row${unused ? ' unused' : ''}`}>
-      <span className={`lu-num ${side}${keeper ? ' gk' : ''}`}>{p.jersey}</span>
-      <span className="lu-who">
-        <PlayerName id={p.playerId} className="lu-name">{p.name}</PlayerName>
-        <span className="lu-role">{role}</span>
-      </span>
-      <EventMarks events={events} includeOn={bench} className="lu-marks" />
+    <li>
+      <button type="button" className={`lu-row row-btn${unused ? ' unused' : ''}`} onClick={() => open(p.playerId)}>
+        <span className={`lu-num ${side}${keeper ? ' gk' : ''}`}>{p.jersey}</span>
+        <span className="lu-who">
+          <span className="lu-name">{p.name}</span>
+          <span className="lu-role">{role}</span>
+        </span>
+        <EventMarks events={events} includeOn={bench} className="lu-marks" />
+        <span className="row-chev"><ChevronRight size={16} /></span>
+      </button>
     </li>
   )
 }
