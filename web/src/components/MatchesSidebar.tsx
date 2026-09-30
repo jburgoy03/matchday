@@ -1,5 +1,5 @@
 import { Link } from 'react-router'
-import type { Leader, MatchListItem, Standing } from '../api'
+import type { Leaderboards, MatchListItem, Standing, Team } from '../api'
 import { ChevronRight } from './Icons'
 import { Crest } from './Crest'
 import { teamPath } from '../teamPath'
@@ -16,9 +16,35 @@ function snapshot(table: Standing[]): Standing[] {
   return arsenal && !top.includes(arsenal) ? [...top, arsenal] : top
 }
 
-export function MatchesSidebar({ table, leaders, arsenalNext }: {
+interface BoardRow {
+  playerId: number
+  name: string
+  team: Team | null
+  value: number
+}
+
+/** One leaderboard: name, club, number. Hidden when nobody has a number yet. */
+function Board({ title, rows }: { title: string; rows: BoardRow[] }) {
+  if (rows.length === 0) return null
+  return (
+    <div className="side-card card">
+      <h2>{title}</h2>
+      <div className="side-scorers">
+        {rows.map(r => (
+          <div key={r.playerId} className="side-scorer">
+            <span className="name">{r.name}</span>
+            <span className="muted abbr">{r.team?.abbreviation ?? ''}</span>
+            <strong>{r.value}</strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function MatchesSidebar({ table, boards, arsenalNext }: {
   table: Standing[] | null
-  leaders: Leader[] | null
+  boards: Leaderboards | null
   arsenalNext: MatchListItem | null
 }) {
   return (
@@ -47,19 +73,12 @@ export function MatchesSidebar({ table, leaders, arsenalNext }: {
         </div>
       )}
 
-      {leaders && leaders.length > 0 && (
-        <div className="side-card card">
-          <h2>Top scorers</h2>
-          <div className="side-scorers">
-            {leaders.map(l => (
-              <div key={l.playerId} className="side-scorer">
-                <span className="name">{l.name}</span>
-                <span className="muted abbr">{l.team?.abbreviation ?? ''}</span>
-                <strong>{l.goals}</strong>
-              </div>
-            ))}
-          </div>
-        </div>
+      {boards && (
+        <>
+          <Board title="Top scorers" rows={boards.scorers.map(l => ({ ...l, value: l.goals }))} />
+          <Board title="Top assists" rows={boards.assists.map(l => ({ ...l, value: l.assists }))} />
+          <Board title="Clean sheets" rows={boards.cleanSheets.map(l => ({ ...l, value: l.cleanSheets }))} />
+        </>
       )}
 
       {arsenalNext && (

@@ -33,6 +33,12 @@ public sealed record MatchDetailDto(
 
 public sealed record LeaderDto(int PlayerId, string Name, TeamDto? Team, int Goals, int Assists);
 
+/// <summary>A goalkeeper's clean sheets: starts in finished matches where his side conceded nothing and he wasn't taken off.</summary>
+public sealed record CleanSheetDto(int PlayerId, string Name, TeamDto? Team, int CleanSheets, int Starts);
+
+/// <summary>The season's leaderboards in one response, for the matches page sidebar.</summary>
+public sealed record LeaderboardsDto(IReadOnlyList<LeaderDto> Scorers, IReadOnlyList<LeaderDto> Assists, IReadOnlyList<CleanSheetDto> CleanSheets);
+
 public sealed record StandingDto(
     int Position, TeamDto Team, int Played, int Won, int Drawn, int Lost,
     int GoalsFor, int GoalsAgainst, int GoalDifference, int Points);
@@ -65,6 +71,7 @@ public static class Endpoints
         api.MapGet("/standings", GetStandings);
         api.MapGet("/teams/{id:int}", GetTeam);
         api.MapGet("/leaders", GetLeaders);
+        api.MapGet("/leaderboards", GetLeaderboards);
         api.MapGet("/news", GetNews);
     }
 
@@ -343,6 +350,79 @@ public static class Endpoints
                 t.Goals, assists.GetValueOrDefault(t.PlayerId)))
             .OrderByDescending(l => l.Goals).ThenByDescending(l => l.Assists).ThenBy(l => l.Name)
             .ToList());
+    }
+
+    /// <summary>Top scorers, top assists and most clean sheets this season.</summary>
+    private static async Task<IResult> GetLeaderboards(MatchdayDbContext db, TimeProvider clock, int? top, CancellationToken ct)
+    {
+        var todayEt = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(clock.GetUtcNow(), Eastern).DateTime);
+        var seasonStartUtc = StartOfEasternDayUtc(Season.StartFor(todayEt));
+        var limit = Math.Clamp(top ?? 5, 1, 50);
+
+        var events = await db.Incidents.AsNoTracking()
+            .Where(i => db.Matches.Any(m => m.Id == i.MatchId && m.KickoffUtc >= seasonStartUtc))
+            .Select(i => new { i.MatchId, i.Type, i.PrimaryPlayerId, i.SecondaryPlayerId, i.TeamId })
+            .ToListAsync(ct);
+
+        // Goals and assists, same rules as /leaders: penalties count as goals, own goals don't,
+        // and only an open-play goal credits its second participant with the assist.
+        var goals = events.Where(e => e.PrimaryPlayerId != null && e.Type is MatchEventType.Goal or MatchEventType.PenaltyGoal)
+            .GroupBy(e => e.PrimaryPlayerId!.Value)
+            .ToDictionary(g => g.Key, g => (Count: g.Count(), TeamId: g.Select(e => e.TeamId).FirstOrDefault(t => t != null)));
+        var assists = events.Where(e => e.SecondaryPlayerId != null && e.Type == MatchEventType.Goal)
+            .GroupBy(e => e.SecondaryPlayerId!.Value)
+            .ToDictionary(g => g.Key, g => (Count: g.Count(), TeamId: g.Select(e => e.TeamId).FirstOrDefault(t => t != null)));
+        int Goals(int id) => goals.TryGetValue(id, out var g) ? g.Count : 0;
+        int Assists(int id) => assists.TryGetValue(id, out var a) ? a.Count : 0;
+
+        var scorerIds = goals.Keys.OrderByDescending(Goals).ThenByDescending(Assists).Take(limit).ToList();
+        var assistIds = assists.Keys.OrderByDescending(Assists).ThenByDescending(Goals).Take(limit).ToList();
+
+        // Clean sheets: the starting keeper in a finished match, opponents on zero, not substituted.
+        var finished = await db.Matches.AsNoTracking()
+            .Where(m => m.KickoffUtc >= seasonStartUtc && m.Status == MatchStatus.FullTime)
+            .Select(m => new { m.Id, m.HomeTeamId, m.HomeScore, m.AwayScore })
+            .ToDictionaryAsync(m => m.Id, ct);
+        var finishedIds = finished.Keys.ToList();
+        var keepers = await db.LineupEntries.AsNoTracking()
+            .Where(l => l.Starter && l.Position == "G" && finishedIds.Contains(l.MatchId))
+            .Select(l => new { l.MatchId, l.TeamId, l.PlayerId })
+            .ToListAsync(ct);
+        var subbedOff = events.Where(e => e.Type == MatchEventType.Substitution && e.SecondaryPlayerId != null)
+            .Select(e => (e.MatchId, e.SecondaryPlayerId!.Value))
+            .ToHashSet();
+        var sheets = keepers
+            .GroupBy(k => k.PlayerId)
+            .Select(g => new
+            {
+                PlayerId = g.Key,
+                TeamId = g.Last().TeamId,
+                Starts = g.Count(),
+                CleanSheets = g.Count(k =>
+                {
+                    var m = finished[k.MatchId];
+                    var conceded = k.TeamId == m.HomeTeamId ? m.AwayScore : m.HomeScore;
+                    return conceded == 0 && !subbedOff.Contains((k.MatchId, k.PlayerId));
+                }),
+            })
+            .Where(x => x.CleanSheets > 0)
+            .OrderByDescending(x => x.CleanSheets).ThenBy(x => x.Starts)
+            .Take(limit)
+            .ToList();
+
+        var playerIds = scorerIds.Concat(assistIds).Concat(sheets.Select(s => s.PlayerId)).Distinct().ToList();
+        var names = await db.Players.AsNoTracking().Where(p => playerIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.Name, ct);
+        var teamIds = goals.Values.Select(g => g.TeamId).Concat(assists.Values.Select(a => a.TeamId)).OfType<int>()
+            .Concat(sheets.Select(s => s.TeamId)).Distinct().ToList();
+        var teams = await db.Teams.AsNoTracking().Where(t => teamIds.Contains(t.Id)).ToDictionaryAsync(t => t.Id, ToTeam, ct);
+        TeamDto? TeamOf(int? id) => id is { } t && teams.TryGetValue(t, out var dto) ? dto : null;
+        LeaderDto Leader(int id, int? teamId) => new(id, names.GetValueOrDefault(id, ""), TeamOf(teamId), Goals(id), Assists(id));
+
+        return Results.Ok(new LeaderboardsDto(
+            scorerIds.Select(id => Leader(id, goals[id].TeamId)).ToList(),
+            assistIds.Select(id => Leader(id, assists[id].TeamId)).ToList(),
+            sheets.Select(s => new CleanSheetDto(s.PlayerId, names.GetValueOrDefault(s.PlayerId, ""), TeamOf(s.TeamId), s.CleanSheets, s.Starts)).ToList()));
     }
 
     private static MatchListItemDto ToListItem(Match m, IReadOnlyList<GoalDto> goals) => new(

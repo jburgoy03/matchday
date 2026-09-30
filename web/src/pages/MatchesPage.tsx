@@ -51,7 +51,7 @@ export default function MatchesPage() {
 
   const { data: matches, error } = useApi(signal => api.matches(range, signal), [range.from, range.to, tick])
   const { data: table } = useApi(api.standings, [tick])
-  const { data: leaders } = useApi(signal => api.leaders(5, signal), [tick])
+  const { data: boards } = useApi(signal => api.leaderboards(5, signal), [tick])
   // Filtering by team switches the list to that club's season from the team endpoint.
   const { data: teamSeason } = useApi(
     signal => (teamId ? api.team(String(teamId), signal) : Promise.resolve(null)),
@@ -75,9 +75,10 @@ export default function MatchesPage() {
     setParams(next, { replace: true })
   }
 
+  // Scrolls to the day holding the next match (or the live one). CSS scroll-margin keeps the day
+  // heading clear of the sticky site header.
   const jumpToNext = () => {
-    const target = mainRef.current?.querySelector('[data-upcoming="true"]') ?? mainRef.current?.lastElementChild
-    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    mainRef.current?.querySelector('[data-next="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   if (error) return <p className="error">Couldn't load matches: {error}</p>
@@ -99,6 +100,11 @@ export default function MatchesPage() {
     else days.push({ key, matches: [m] })
   }
   if (show === 'results') days.reverse()
+
+  // The day to jump to: the first one with a match still to finish (live counts). Only worth a button
+  // when there are earlier days above it — in Fixtures, or once the season's over, there's nowhere to go.
+  const nextDayIdx = show === 'results' ? -1 : days.findIndex(d => d.matches.some(m => !FINISHED.has(m.status)))
+  const canJump = nextDayIdx > 0
 
   const live = visible.filter(m => isLive(m.status))
   const todays = visible.filter(m => dayKey(m.kickoffUtc) === today)
@@ -125,10 +131,10 @@ export default function MatchesPage() {
                 </button>
               ))}
             </div>
-            {show !== 'results' && (
+            {canJump && (
               <div className="rail-buttons">
                 <button type="button" className="rail-btn" onClick={jumpToNext}>
-                  <span>Jump to next match</span>
+                  <span>{live.length > 0 ? 'Jump to live' : 'Jump to next match'}</span>
                 </button>
               </div>
             )}
@@ -147,33 +153,33 @@ export default function MatchesPage() {
           )}
         </div>
 
-        <div className="matches-main">
+        {/* Heading and the live / today / next-up strip. On phones this sits above the controls. */}
+        <div className="matches-head">
           <h1>Matches</h1>
+          {!loading && <NowStrip live={live} todays={todays} next={next} today={today} />}
+        </div>
 
+        <div className="matches-list">
           {loading ? (
             <p className="muted">Loading…</p>
           ) : (
-            <>
-              <NowStrip live={live} todays={todays} next={next} today={today} />
-
-              <div className="matches-days" ref={mainRef}>
-                {days.map(d => (
-                  <section key={d.key} data-upcoming={d.key >= today ? 'true' : undefined}>
-                    <h2 className="day-head">{dayLabel(d.key, today)}</h2>
-                    <div className="m-list card">
-                      {d.matches.map(m => <MatchRow key={m.id} m={m} />)}
-                    </div>
-                  </section>
-                ))}
-                {days.length === 0 && (
-                  <p className="muted">{teamId ? 'No matches for this team yet.' : 'Nothing to show here yet.'}</p>
-                )}
-              </div>
-            </>
+            <div className="matches-days" ref={mainRef}>
+              {days.map((d, i) => (
+                <section key={d.key} className="match-day" data-next={i === nextDayIdx ? 'true' : undefined}>
+                  <h2 className="day-head">{dayLabel(d.key, today)}</h2>
+                  <div className="m-list card">
+                    {d.matches.map(m => <MatchRow key={m.id} m={m} />)}
+                  </div>
+                </section>
+              ))}
+              {days.length === 0 && (
+                <p className="muted">{teamId ? 'No matches for this team yet.' : 'Nothing to show here yet.'}</p>
+              )}
+            </div>
           )}
         </div>
 
-        <MatchesSidebar table={table ?? null} leaders={leaders ?? null} arsenalNext={arsenalNext} />
+        <MatchesSidebar table={table ?? null} boards={boards ?? null} arsenalNext={arsenalNext} />
       </div>
     </section>
   )

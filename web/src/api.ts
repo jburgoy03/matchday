@@ -147,6 +147,21 @@ export interface Leader {
   assists: number
 }
 
+export interface CleanSheetLeader {
+  playerId: number
+  name: string
+  team: Team | null
+  cleanSheets: number
+  /** League starts this season */
+  starts: number
+}
+
+export interface Leaderboards {
+  scorers: Leader[]
+  assists: Leader[]
+  cleanSheets: CleanSheetLeader[]
+}
+
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`/api${path}`, { signal })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
@@ -159,6 +174,7 @@ export const api = {
   match: (id: string, signal?: AbortSignal) => get<MatchDetail>(`/matches/${id}`, signal),
   standings: (signal?: AbortSignal) => get<Standing[]>('/standings', signal),
   leaders: (top = 5, signal?: AbortSignal) => get<Leader[]>(`/leaders?top=${top}`, signal),
+  leaderboards: (top = 5, signal?: AbortSignal) => get<Leaderboards>(`/leaderboards?top=${top}`, signal),
   team: (id: string, signal?: AbortSignal) => get<TeamPage>(`/teams/${id}`, signal),
   news: (top = 10, signal?: AbortSignal) => get<News[]>(`/news?top=${top}`, signal),
 }

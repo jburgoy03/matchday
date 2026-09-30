@@ -133,13 +133,17 @@ h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em; margin: 0.5r
 .matches-layout {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) 300px;
-  grid-template-areas: "rail main side";
-  gap: 2rem;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "rail head side"
+    "rail list side";
+  gap: 1.1rem 2rem;
   align-items: start;
 }
 .matches-rail { grid-area: rail; display: flex; flex-direction: column; gap: 1.4rem; position: sticky; top: 4.5rem; }
-.matches-main { grid-area: main; display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; }
-.matches-main h1 { margin: 0; }
+.matches-head { grid-area: head; display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; }
+.matches-head h1 { margin: 0; }
+.matches-list { grid-area: list; min-width: 0; }
 .matches-side { grid-area: side; display: flex; flex-direction: column; gap: 1rem; position: sticky; top: 4.5rem; }
 
 .rail-label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.5rem; }
@@ -198,6 +202,8 @@ h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em; margin: 0.5r
 .now-strip .m-venue { display: none; } /* the strip prints the venue itself */
 
 .matches-days { display: flex; flex-direction: column; gap: 1.1rem; }
+/* Jump-to-next lands with the day heading clear of the sticky site header */
+.match-day { scroll-margin-top: 4.75rem; }
 .day-head { margin: 0 0 0.45rem; font-size: 0.82rem; font-weight: 500; color: var(--muted); }
 .m-list { overflow: hidden; }
 .m-row {
@@ -264,7 +270,12 @@ h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em; margin: 0.5r
 
 /* Laptop: the rail's controls become a toolbar above the list */
 @media (max-width: 1200px) {
-  .matches-layout { grid-template-columns: minmax(0, 1fr) 280px; grid-template-areas: "rail rail" "main side"; gap: 1.25rem 1.5rem; }
+  .matches-layout {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas: "head side" "rail side" "list side";
+    gap: 1.1rem 1.5rem;
+  }
   .matches-rail { position: static; flex-direction: row; align-items: flex-end; flex-wrap: wrap; gap: 1rem; }
   .matches-rail .rail-group { flex: 0 0 auto; }
   .matches-rail .rail-group:first-child { width: 240px; }
@@ -276,7 +287,7 @@ h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em; margin: 0.5r
 
 /* Tablet and phone: one column, sidebar cards side by side under the list */
 @media (max-width: 900px) {
-  .matches-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "rail" "main" "side"; }
+  .matches-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "head" "rail" "list" "side"; }
   .matches-side { position: static; flex-direction: row; flex-wrap: wrap; }
   .matches-side .side-card { flex: 1 1 250px; }
 }
@@ -300,9 +311,11 @@ h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em; margin: 0.5r
   .m-scorers .home, .m-scorers .away { text-align: left; }
   .m-scorers .ht { display: none; }
   .m-venue { text-align: left; }
-  .matches-rail .rail-group { width: 100%; }
+  /* Phones: every control full width and lined up (the laptop rule fixed the first group at 240px) */
+  .matches-rail { flex-direction: column; align-items: stretch; gap: 0.9rem; }
+  .matches-rail .rail-group, .matches-rail .rail-group:first-child { width: 100%; }
   .rail-buttons { flex-wrap: wrap; }
-  .rail-btn { flex: 1 1 auto; justify-content: center; }
+  .rail-btn { flex: 1 1 auto; justify-content: center; text-align: center; }
   .rail-select, .team-filter { width: 100%; }
 }
 
