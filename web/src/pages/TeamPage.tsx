@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { Fragment, useEffect, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { api, type MatchListItem, type News, type SquadPlayer, type Standing, type Team, type TeamStats } from '../api'
 import { useApi } from '../useApi'
@@ -214,10 +214,14 @@ function Overview({ team, table, results, next, squad, news, onAllNews }: {
   const scorers = squad
     .filter(p => p.goals > 0)
     .sort((a, b) => b.goals - a.goals || b.assists - a.assists)
-    .slice(0, 3)
+    .slice(0, 5)
+  const assisters = squad
+    .filter(p => p.assists > 0)
+    .sort((a, b) => b.assists - a.assists || b.goals - a.goals)
+    .slice(0, 5)
 
   return (
-    <div className="tp-grid">
+    <div className={`tp-grid ${news.length > 0 ? 'has-news' : ''}`}>
       <div className="tp-col">
         {next && <NextMatch team={team} m={next} />}
         {last && (
@@ -239,60 +243,74 @@ function Overview({ team, table, results, next, squad, news, onAllNews }: {
         {table.length > 0 && <MiniTable team={team} table={table} />}
         {scorers.length > 0 && (
           <Card title="Top scorers">
-            <div className="tp-scorers">
-              <span /><span /><span className="muted">G</span><span className="muted">A</span>
-              {scorers.map(p => (
-                <ScorerRow key={p.playerId} p={p} />
-              ))}
-            </div>
+            <LeaderTable players={scorers} lead="goals" />
           </Card>
         )}
-        {news.length > 0 && (
-          <section className="tp-news">
-            <h2 className="tp-section-title">Latest news</h2>
-            <NewsList items={news} max={5} />
-            {news.length > 5 && (
-              <button type="button" className="news-more card" onClick={onAllNews}>
-                <span>More {team.shortName} news</span>
-                <ChevronRight size={16} />
-              </button>
-            )}
-          </section>
+        {assisters.length > 0 && (
+          <Card title="Top assists">
+            <LeaderTable players={assisters} lead="assists" />
+          </Card>
         )}
       </div>
+
+      {news.length > 0 && (
+        <section className="tp-col tp-news">
+          <h2 className="tp-section-title">Latest news</h2>
+          <NewsList items={news} max={5} />
+          {news.length > 5 && (
+            <button type="button" className="news-more card" onClick={onAllNews}>
+              <span>More {team.shortName} news</span>
+              <ChevronRight size={16} />
+            </button>
+          )}
+        </section>
+      )}
+    </div>
+  )
+}
+
+/** Goals and assists side by side; whichever the card is about is the bold column. */
+function LeaderTable({ players, lead }: { players: SquadPlayer[]; lead: 'goals' | 'assists' }) {
+  return (
+    <div className="tp-scorers">
+      <span /><span />
+      <span className={lead === 'goals' ? '' : 'muted'}>G</span>
+      <span className={lead === 'assists' ? '' : 'muted'}>A</span>
+      {players.map(p => (
+        <Fragment key={p.playerId}>
+          <span className="jersey-chip">{p.jersey}</span>
+          <span className="tp-scorer-name">{p.name}</span>
+          {lead === 'goals' ? (
+            <><strong>{p.goals}</strong><span className="muted">{p.assists}</span></>
+          ) : (
+            <><span className="muted">{p.goals}</span><strong>{p.assists}</strong></>
+          )}
+        </Fragment>
+      ))}
     </div>
   )
 }
 
 /* ---------- News ---------- */
 
-/** The fuller list: the lead keeps its photo, everything else is a row. */
+/** The fuller list: the lead beside the rest, so the photo can't push everything off the screen. */
 function NewsTab({ news }: { news: News[] }) {
+  const lead = news[0].imageUrl ? news[0] : null
+  const rest = lead ? news.slice(1) : news
+
   return (
-    <div className="tp-sections">
-      <section className="tp-news wide">
-        {news[0].imageUrl && <NewsLead item={news[0]} />}
+    <div className="tp-news-tab">
+      {lead && <NewsLead item={lead} />}
+      <div className="tp-news-rest">
         <div className="news-rows card">
-          {news.slice(news[0].imageUrl ? 1 : 0).map(n => <NewsRow key={n.id} item={n} />)}
+          {rest.map(n => <NewsRow key={n.id} item={n} />)}
         </div>
-        <p className="muted tp-news-note">
-          Headlines from ESPN. Stories open on espn.com.
-        </p>
-      </section>
+        <p className="muted tp-news-note">Headlines from ESPN. Stories open on espn.com.</p>
+      </div>
     </div>
   )
 }
 
-function ScorerRow({ p }: { p: SquadPlayer }) {
-  return (
-    <>
-      <span className="jersey-chip">{p.jersey}</span>
-      <span>{p.name}</span>
-      <strong>{p.goals}</strong>
-      <span className="muted">{p.assists}</span>
-    </>
-  )
-}
 
 function NextMatch({ team, m }: { team: Team; m: MatchListItem }) {
   const home = m.home.id === team.id
