@@ -63,11 +63,14 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
     private readonly Queue<string> _clubNewsQueue = new();
 
     // Schedules: each club's all-competitions schedule (results + fixtures), which is how cup and
-    // European matches get in. Two requests per club; live scores then come from the detail pulls.
+    // European matches get in. Every club in a followed table, two requests each, swept a few per tick;
+    // live scores then come from the detail pulls.
     private static readonly TimeSpan SchedulesInterval = TimeSpan.FromHours(12);
     private const string SchedulesKey = "schedules-synced-at";
     private DateTimeOffset? _schedulesSyncedAt;
     private bool _schedulesMarkLoaded;
+    private const int SchedulesPerTick = 6; // ~100 clubs ≈ 8 minutes per sweep
+    private readonly Queue<string> _scheduleQueue = new();
 
     // Squads: every club's roster once a day. The last run is stored in SyncStates so deploys don't refetch.
     private const string SquadsKey = "squads-synced-at";
@@ -313,9 +316,11 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
     }
 
     /// <summary>
-    /// Each club's all-competitions schedule once per SchedulesInterval: adds Champions League, Europa,
-    /// Conference, FA Cup, League Cup and Community Shield matches (see Competitions). A failure for one
-    /// club doesn't stop the rest. New finished matches arrive without detail, so the detail backfill fills them.
+    /// Every club in a table we follow (the Premier League plus the UEFA league phases) gets its
+    /// all-competitions schedule pulled, SchedulesPerTick clubs at a time, then the sweep rests until
+    /// SchedulesInterval has passed. Only followed competitions are stored, so a French club brings its
+    /// Champions League matches but not Ligue 1. A failure for one club doesn't stop the rest; new finished
+    /// matches arrive without detail, so the detail backfill fills them in.
     /// </summary>
     private async Task<bool> SyncSchedulesIfDueAsync(DateTimeOffset now, CancellationToken ct)
     {
@@ -325,19 +330,31 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
                 DateTimeStyles.AssumeUniversal, out var at) ? at : null;
             _schedulesMarkLoaded = true;
         }
-        if (_schedulesSyncedAt is { } last && now - last < SchedulesInterval) return false;
 
-        List<string> teamIds;
-        await using (var scope = scopes.CreateAsyncScope())
+        if (_scheduleQueue.Count == 0)
         {
-            var db = scope.ServiceProvider.GetRequiredService<MatchdayDbContext>();
-            teamIds = await db.Standings.AsNoTracking().Where(s => s.Competition == Competitions.PremierLeague).OrderBy(s => s.Position).Select(s => s.Team.ProviderId).ToListAsync(ct);
+            if (_schedulesSyncedAt is { } last && now - last < SchedulesInterval) return false;
+
+            List<string> teamIds;
+            await using (var scope = scopes.CreateAsyncScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<MatchdayDbContext>();
+                // Premier League clubs first, then the rest of Europe.
+                teamIds = (await db.Standings.AsNoTracking()
+                        .OrderBy(s => s.Competition == Competitions.PremierLeague ? 0 : 1).ThenBy(s => s.Position)
+                        .Select(s => s.Team.ProviderId).ToListAsync(ct))
+                    .Distinct().ToList();
+            }
+            if (teamIds.Count == 0) return false; // standings not synced yet; try next tick
+
+            foreach (var id in teamIds) _scheduleQueue.Enqueue(id);
+            log.LogInformation("Club schedule sweep started ({Clubs} clubs)", teamIds.Count);
         }
-        if (teamIds.Count == 0) return false; // standings not synced yet; try next tick
 
         var anyFinished = false;
-        foreach (var teamId in teamIds)
+        for (var i = 0; i < SchedulesPerTick && _scheduleQueue.Count > 0; i++)
         {
+            var teamId = _scheduleQueue.Dequeue();
             try
             {
                 anyFinished |= await WithSync(s => s.SyncTeamScheduleAsync(teamId, ct));
@@ -347,10 +364,11 @@ public sealed class SyncWorker(IServiceScopeFactory scopes, TimeProvider clock, 
                 log.LogWarning(ex, "Schedule sync failed for team {TeamId}", teamId);
             }
         }
+        if (_scheduleQueue.Count > 0) return anyFinished;
 
         await WriteStateAsync(SchedulesKey, now.ToString("O", CultureInfo.InvariantCulture), now, ct);
         _schedulesSyncedAt = now;
-        log.LogInformation("Club schedules synced ({Teams} clubs)", teamIds.Count);
+        log.LogInformation("Club schedule sweep complete");
         return anyFinished;
     }
 

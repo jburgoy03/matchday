@@ -139,6 +139,8 @@ export interface TeamPage {
   squad: SquadPlayer[]
   stats: SeasonStats | null
   news: News[]
+  /** Which table `table` is: eng.1, or a UEFA league phase for a club outside the Premier League */
+  tableCompetition: string
 }
 
 export interface Leader {

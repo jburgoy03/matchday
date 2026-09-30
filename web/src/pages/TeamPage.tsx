@@ -9,7 +9,7 @@ import { teamPath } from '../teamPath'
 import { Crest } from '../components/Crest'
 import { NewsList, NewsLead, NewsRow } from '../components/NewsList'
 import { PlayerName, useOpenPlayer } from '../components/PlayerProfile'
-import { CompetitionChip, isLeague } from '../competitions'
+import { CompetitionChip, competitionName } from '../competitions'
 
 type Tab = 'overview' | 'matches' | 'squad' | 'stats' | 'news'
 type Result = 'W' | 'D' | 'L'
@@ -78,11 +78,12 @@ export default function TeamPage({ teamId }: { teamId?: string }) {
   if (error) return <p className="error">Couldn't load this team: {error}</p>
   if (!data) return <p className="muted">Loading…</p>
 
-  const { team, venue, table, matches, squad, stats, news } = data
+  const { team, venue, table, matches, squad, stats, news, tableCompetition } = data
   const standing = table.find(s => s.team.id === team.id) ?? null
-  // Every competition for the Matches tab; form, record and stats stay league only.
+  // Every competition for the Matches tab; form, record and stats come from the club's own table's
+  // competition — the Premier League, or the Champions League for a PSG.
   const allResults = matches.map(m => toPlayed(m, team.id)).filter((p): p is Played => p !== null)
-  const results = allResults.filter(p => isLeague(p.match.competition))
+  const results = allResults.filter(p => p.match.competition === tableCompetition)
   const upcoming = matches.filter(m => m.status === 'Scheduled' || isLive(m.status))
 
   const tabs: { id: Tab; label: string }[] = [
@@ -133,6 +134,7 @@ export default function TeamPage({ teamId }: { teamId?: string }) {
         <Overview
           team={team}
           table={table}
+          tableCompetition={tableCompetition}
           results={results}
           next={upcoming[0] ?? null}
           squad={squad}
@@ -210,8 +212,8 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
 
 /* ---------- Overview ---------- */
 
-function Overview({ team, table, results, next, squad, news, onAllNews }: {
-  team: Team; table: Standing[]; results: Played[]; next: MatchListItem | null; squad: SquadPlayer[]
+function Overview({ team, table, tableCompetition, results, next, squad, news, onAllNews }: {
+  team: Team; table: Standing[]; tableCompetition: string; results: Played[]; next: MatchListItem | null; squad: SquadPlayer[]
   news: News[]; onAllNews: () => void
 }) {
   const last = results.at(-1) ?? null
@@ -244,7 +246,7 @@ function Overview({ team, table, results, next, squad, news, onAllNews }: {
         <Record results={results} />
       </div>
       <div className="tp-col">
-        {table.length > 0 && <MiniTable team={team} table={table} />}
+        {table.length > 0 && <MiniTable team={team} table={table} competition={tableCompetition} />}
         {scorers.length > 0 && (
           <Card title="Top scorers">
             <LeaderTable players={scorers} lead="goals" />
@@ -400,12 +402,12 @@ function Big({ n, label, cls = '' }: { n: number | string; label: string; cls?: 
   )
 }
 
-function MiniTable({ team, table }: { team: Team; table: Standing[] }) {
+function MiniTable({ team, table, competition }: { team: Team; table: Standing[]; competition: string }) {
   const idx = table.findIndex(s => s.team.id === team.id)
   const start = Math.max(0, Math.min(idx - 2, table.length - 5))
   const rows = idx < 0 ? table.slice(0, 5) : table.slice(start, start + 5)
   return (
-    <Card title="League position">
+    <Card title={competition === 'eng.1' ? 'League position' : `${competitionName(competition)} position`}>
       <div className="tp-mini">
         <div className="tp-mini-row head muted">
           <span>#</span><span>Team</span><span>P</span><span>GD</span><span>Pts</span>
@@ -425,7 +427,7 @@ function MiniTable({ team, table }: { team: Team; table: Standing[] }) {
           </Link>
         ))}
       </div>
-      <Link to="/table" className="tp-more">
+      <Link to={competition === 'eng.1' ? '/table' : `/table?comp=${competition}`} className="tp-more">
         <span>View full table</span>
         <ChevronRight size={16} />
       </Link>

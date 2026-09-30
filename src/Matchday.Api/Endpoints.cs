@@ -65,9 +65,10 @@ public sealed record NewsDto(
     int Id, string Headline, string? Description, string? Byline, DateTimeOffset PublishedUtc,
     string? ImageUrl, string? ImageCredit, string? WebUrl, IReadOnlyList<int> TeamIds);
 
+/// <summary>TableCompetition says which table Table is: the Premier League, or a UEFA league phase for a club not in it.</summary>
 public sealed record TeamPageDto(
     TeamDto Team, string? Venue, IReadOnlyList<StandingDto> Table, IReadOnlyList<MatchListItemDto> Matches,
-    IReadOnlyList<SquadPlayerDto> Squad, SeasonStatsDto? Stats, IReadOnlyList<NewsDto> News);
+    IReadOnlyList<SquadPlayerDto> Squad, SeasonStatsDto? Stats, IReadOnlyList<NewsDto> News, string TableCompetition);
 
 public static class Endpoints
 {
@@ -186,9 +187,13 @@ public static class Endpoints
             .OrderBy(m => m.KickoffUtc)
             .ToListAsync(ct);
 
+        // The table this club is in: the Premier League if it's there, otherwise its European league phase
+        // (a PSG or a Bayern only reaches us through the Champions League).
+        var inTables = await db.Standings.AsNoTracking().Where(s => s.TeamId == id).Select(s => s.Competition).ToListAsync(ct);
+        var tableCompetition = Competitions.WithTables.FirstOrDefault(inTables.Contains) ?? Competitions.PremierLeague;
         var table = await db.Standings.AsNoTracking()
             .Include(s => s.Team)
-            .Where(s => s.Competition == Competitions.PremierLeague)
+            .Where(s => s.Competition == tableCompetition)
             .OrderBy(s => s.Position)
             .ToListAsync(ct);
 
@@ -249,7 +254,7 @@ public static class Endpoints
 
         return Results.Ok(new TeamPageDto(
             ToTeam(team), venue, table.Select(ToStanding).ToList(),
-            matches.Select(m => ToListItem(m, teamGoals.GetValueOrDefault(m.Id, []))).ToList(), squad, stats, news));
+            matches.Select(m => ToListItem(m, teamGoals.GetValueOrDefault(m.Id, []))).ToList(), squad, stats, news, tableCompetition));
     }
 
     /// <summary>

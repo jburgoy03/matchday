@@ -198,7 +198,7 @@ function NowStrip({ live, todays, next, today }: {
   const sameDay = dayKey(next.kickoffUtc) === today
 
   return (
-    <div className="now-strip card">
+    <div className="now-strip card next">
       <span className="now-label">Next up{live.length === 0 && todays.length === 0 ? ' · no matches today' : ''}</span>
       <div className="now-next">
         <MatchRow m={next} />
