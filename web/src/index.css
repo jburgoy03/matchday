@@ -202,12 +202,6 @@ h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em; margin: 0.5r
 .rail-btn .icon { color: var(--muted); }
 
 /* Live, or today, or a countdown */
-.now-strip { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.85rem 1rem; border-left: 3px solid var(--accent); }
-.now-label { font-size: 0.78rem; color: var(--muted); }
-.now-when { font-size: 0.8rem; color: var(--muted); padding-left: 1.1rem; }
-.now-strip .m-row { border-top: 0; padding: 0.35rem 0; }
-.now-strip .m-row:hover { background: transparent; color: var(--accent); }
-.now-strip .m-venue { display: none; } /* the strip prints the venue itself */
 
 .matches-days { display: flex; flex-direction: column; gap: 1.1rem; }
 /* Jump-to-next lands with the day heading clear of the sticky site header */
@@ -1234,7 +1228,6 @@ button.shirt:hover .shirt-label { background: rgba(9, 18, 13, 0.95); }
 @media (max-width: 560px) {
   .matches-layout { gap: 0.75rem; }
   .matches-head { gap: 0.75rem; }
-  .now-strip.next { display: none; }
 
   .matches-rail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.6rem; align-items: end; }
   .matches-rail .rail-group, .matches-rail .rail-group:first-child { width: auto; min-width: 0; }

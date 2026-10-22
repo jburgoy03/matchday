@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { api, type MatchListItem, type Team } from '../api'
 import { useApi } from '../useApi'
@@ -7,8 +7,6 @@ import { MatchRow } from '../components/MatchRow'
 import { MatchesSidebar } from '../components/MatchesSidebar'
 import { TeamFilter } from '../components/TeamFilter'
 import { COMPETITION_ORDER, CompetitionPicker, PREMIER_LEAGUE, WITH_TABLES } from '../competitions'
-
-type Show = 'results' | 'fixtures'
 
 const ET = 'America/New_York'
 const keyFmt = new Intl.DateTimeFormat('en-CA', { timeZone: ET, year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -41,12 +39,10 @@ export default function MatchesPage() {
   const [params, setParams] = useSearchParams()
   const [tick, setTick] = useState(0)
 
-  // Fixtures by default. Old links with ?show=all land on Fixtures too.
-  const show: Show = params.get('show') === 'results' ? 'results' : 'fixtures'
   const teamId = Number(params.get('team') ?? 0) || 0
 
   const today = dayKey(new Date())
-  // The whole season in one request, so switching Show is instant and every fixture is present.
+  // The whole season in one request, so the list covers every result and fixture.
   const range = useMemo(() => ({ from: seasonStart(today), to: seasonEnd(today) }), [today])
 
   const { data: matches, error } = useApi(signal => api.matches(range, signal), [range.from, range.to, tick])
@@ -95,8 +91,6 @@ export default function MatchesPage() {
     setParams(next, { replace: true })
   }
 
-  if (error) return <p className="error">Couldn't load matches: {error}</p>
-
   // Clubs in this competition: its table (when it has one) plus anyone with a match in it this season,
   // so a cup's lower-league sides and a knockout-only club are pickable too.
   const compTeams = new Map<number, Team>()
@@ -110,29 +104,35 @@ export default function MatchesPage() {
   if (teamSeason && !compTeams.has(teamSeason.team.id)) compTeams.set(teamSeason.team.id, teamSeason.team)
   const teams = [...compTeams.values()]
 
-  const visible = (source ?? []).filter(m => {
-    if (m.competition !== comp) return false
-    const finished = FINISHED.has(m.status)
-    return show === 'results' ? finished : !finished
-  })
-
-  // The strip above the list shows live matches, else today's. Those aren't repeated in the list below.
-  const live = visible.filter(m => isLive(m.status))
-  const todays = visible.filter(m => dayKey(m.kickoffUtc) === today)
-  const inStrip = new Set((live.length > 0 ? live : todays).map(m => m.id))
-
-  // Group into Eastern days, keeping the API's kickoff order. Results read newest first.
+  // One list for the whole season: results, live and upcoming, grouped into Eastern days in kickoff order.
   const days: { key: string; matches: MatchListItem[] }[] = []
-  for (const m of visible) {
-    if (inStrip.has(m.id)) continue
+  for (const m of source ?? []) {
+    if (m.competition !== comp) continue
     const key = dayKey(m.kickoffUtc)
     const last = days.at(-1)
     if (last?.key === key) last.matches.push(m)
     else days.push({ key, matches: [m] })
   }
-  if (show === 'results') days.reverse()
+  // Where the page opens: today, or the next day with matches (the last day once the season is over).
+  const anchorKey = (days.find(d => d.key >= today) ?? days.at(-1))?.key
 
-  const next = visible.find(m => !FINISHED.has(m.status) && new Date(m.kickoffUtc) > new Date()) ?? null
+  // Jump to the anchor day once per list (first load, competition or team change), not on live refreshes.
+  const listRef = useRef<HTMLDivElement>(null)
+  const scrolledFor = useRef('')
+  const listId = `${comp}|${teamId}`
+  const jumpToToday = (smooth: boolean) => {
+    const el = listRef.current?.querySelector<HTMLElement>('[data-anchor]')
+    el?.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' })
+  }
+  useEffect(() => {
+    if (loading || !anchorKey || scrolledFor.current === listId) return
+    scrolledFor.current = listId
+    // Nothing to skip past when the anchor is the season's first day.
+    if (anchorKey !== days[0]?.key) jumpToToday(false)
+  })
+
+  if (error) return <p className="error">Couldn't load matches: {error}</p>
+
   const arsenalNext = (matches ?? []).find(
     m => !FINISHED.has(m.status) && (m.home.abbreviation === 'ARS' || m.away.abbreviation === 'ARS'),
   ) ?? null
@@ -148,19 +148,9 @@ export default function MatchesPage() {
             </div>
           )}
           <div className="rail-group">
-            <span className="rail-label">Show</span>
-            <div className="segmented" role="group" aria-label="Filter matches">
-              {(['fixtures', 'results'] as Show[]).map(v => (
-                <button
-                  key={v}
-                  type="button"
-                  aria-pressed={show === v}
-                  onClick={() => set('show', v, 'fixtures')}
-                >
-                  {v === 'results' ? 'Results' : 'Fixtures'}
-                </button>
-              ))}
-            </div>
+            <button type="button" className="rail-btn" onClick={() => jumpToToday(true)} disabled={!anchorKey}>
+              Jump to today
+            </button>
           </div>
 
           {teams.length > 0 && (
@@ -176,26 +166,25 @@ export default function MatchesPage() {
           )}
         </div>
 
-        {/* Heading and the live / today / next-up strip. On phones this sits above the controls. */}
+        {/* On phones the heading sits above the controls. */}
         <div className="matches-head">
           <h1>Matches</h1>
-          {!loading && <NowStrip live={live} todays={todays} next={next} today={today} />}
         </div>
 
         <div className="matches-list">
           {loading ? (
             <p className="muted">Loading…</p>
           ) : (
-            <div className="matches-days">
+            <div className="matches-days" ref={listRef}>
               {days.map(d => (
-                <section key={d.key} className="match-day">
+                <section key={d.key} className="match-day" data-anchor={d.key === anchorKey ? '' : undefined}>
                   <h2 className="day-head">{dayLabel(d.key, today)}</h2>
                   <div className="m-list card">
                     {d.matches.map(m => <MatchRow key={m.id} m={m} />)}
                   </div>
                 </section>
               ))}
-              {days.length === 0 && inStrip.size === 0 && (
+              {days.length === 0 && (
                 <p className="muted">{teamId ? 'No matches for this team yet.' : 'Nothing to show here yet.'}</p>
               )}
             </div>
@@ -205,39 +194,5 @@ export default function MatchesPage() {
         <MatchesSidebar competition={comp} table={table} boards={boards} arsenalNext={arsenalNext} />
       </div>
     </section>
-  )
-}
-
-/** Live matches, else today's, else a countdown to the next kickoff. */
-function NowStrip({ live, todays, next, today }: {
-  live: MatchListItem[]; todays: MatchListItem[]; next: MatchListItem | null; today: string
-}) {
-  const shown = live.length > 0 ? live : todays
-  if (shown.length > 0) {
-    return (
-      <div className="now-strip card">
-        <span className="now-label">{live.length > 0 ? 'Live now' : 'Today'}</span>
-        <div className="m-list">{shown.map(m => <MatchRow key={m.id} m={m} />)}</div>
-      </div>
-    )
-  }
-  if (!next) return null
-
-  const days = Math.max(0, Math.ceil((new Date(next.kickoffUtc).getTime() - Date.now()) / 86_400_000))
-  const when = new Intl.DateTimeFormat('en-US', {
-    timeZone: ET, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-  }).format(new Date(next.kickoffUtc))
-  const sameDay = dayKey(next.kickoffUtc) === today
-
-  return (
-    <div className="now-strip card next">
-      <span className="now-label">Next up{live.length === 0 && todays.length === 0 ? ' · no matches today' : ''}</span>
-      <div className="now-next">
-        <MatchRow m={next} />
-        <span className="now-when">
-          {when} ET · {sameDay ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`}
-        </span>
-      </div>
-    </div>
   )
 }
