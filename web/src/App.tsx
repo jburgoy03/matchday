@@ -1,4 +1,4 @@
-import { BrowserRouter, NavLink, Route, Routes } from 'react-router'
+import { BrowserRouter, Link, NavLink, Route, Routes } from 'react-router'
 import MatchesPage from './pages/MatchesPage'
 import MatchPage from './pages/MatchPage'
 import TablePage from './pages/TablePage'
@@ -13,7 +13,7 @@ export default function App() {
     <BrowserRouter>
       <PlayerProfileProvider>
       <header className="site-header">
-        <span className="brand">Matchday</span>
+        <Link to="/" className="brand">Matchday</Link>
         <nav>
           <NavLink to="/" end>
             Matches

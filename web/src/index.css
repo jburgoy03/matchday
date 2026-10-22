@@ -51,7 +51,7 @@ a { color: inherit; }
   top: 0;
   z-index: 1;
 }
-.brand { font-weight: 700; letter-spacing: 0.02em; }
+.brand { font-weight: 700; letter-spacing: 0.02em; text-decoration: none; }
 .site-header nav { display: flex; gap: 1rem; }
 .site-header nav a {
   text-decoration: none;
@@ -1393,3 +1393,11 @@ button.shirt:hover .shirt-label { background: rgba(9, 18, 13, 0.95); }
   .tlx-divider { justify-content: stretch; padding: 0.6rem 0; }
   .tlx-divider-pill { width: 100%; justify-content: space-between; border-radius: 10px; }
 }
+
+/* ---------- Matches page on phones and tablets ----------
+   The list shows a window of days around today with buttons to widen it, and the sidebar is
+   its own view behind a switch beside the heading, so nothing sits behind a season of matches. */
+.matches-title { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.matches-view { flex: 0 1 auto; }
+.matches-view button { flex: 0 0 auto; padding-inline: 0.9rem; white-space: nowrap; }
+.more-days { justify-content: center; text-align: center; color: var(--muted); }

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { api, type MatchListItem, type Team } from '../api'
 import { useApi } from '../useApi'
+import { useMediaQuery } from '../useMediaQuery'
 import { isLive } from '../format'
 import { MatchRow } from '../components/MatchRow'
 import { MatchesSidebar } from '../components/MatchesSidebar'
@@ -35,11 +36,22 @@ const seasonEnd = (today: string) => `${Number(seasonStart(today).slice(0, 4)) +
 
 const FINISHED = new Set(['FullTime', 'Postponed', 'Cancelled'])
 
+/** Below this width the sidebar can't sit beside the list (matches the 900px rule in index.css). */
+const COMPACT = '(max-width: 900px)'
+/** Match days shown around today on a compact screen, and how many each "show more" adds. */
+const DAYS_BEFORE = 3
+const DAYS_AFTER = 5
+const DAYS_STEP = 7
+
 export default function MatchesPage() {
   const [params, setParams] = useSearchParams()
   const [tick, setTick] = useState(0)
 
   const teamId = Number(params.get('team') ?? 0) || 0
+  // Phones and tablets: the sidebar becomes its own view, and the list shows a window of days
+  // around today instead of the whole season, so the controls and the table are always close by.
+  const compact = useMediaQuery(COMPACT)
+  const view = compact && params.get('view') === 'table' ? 'table' : 'list'
 
   const today = dayKey(new Date())
   // The whole season in one request, so the list covers every result and fixture.
@@ -116,10 +128,41 @@ export default function MatchesPage() {
   // Where the page opens: today, or the next day with matches (the last day once the season is over).
   const anchorKey = (days.find(d => d.key >= today) ?? days.at(-1))?.key
 
-  // Jump to the anchor day once per list (first load, competition or team change), not on live refreshes.
+  // Jump to the anchor day once per list (first load, competition, team or view change), not on live refreshes.
   const listRef = useRef<HTMLDivElement>(null)
   const scrolledFor = useRef('')
-  const listId = `${comp}|${teamId}`
+  const listId = `${comp}|${teamId}|${view}`
+
+  // Compact screens: a window of match days around the anchor, widened on request. Resets per list.
+  const [win, setWin] = useState({ id: listId, before: DAYS_BEFORE, after: DAYS_AFTER })
+  const w = win.id === listId ? win : { id: listId, before: DAYS_BEFORE, after: DAYS_AFTER }
+  const anchorIndex = Math.max(0, days.findIndex(d => d.key === anchorKey))
+  const firstShown = compact ? Math.max(0, anchorIndex - w.before) : 0
+  const lastShown = compact ? Math.min(days.length, anchorIndex + w.after) : days.length
+  const shown = days.slice(firstShown, lastShown)
+
+  // Showing earlier days adds them above; keep the day that was on top where it was on screen
+  // (Safari has no scroll anchoring, so without this the list jumps).
+  const keepInPlace = useRef<{ key: string; top: number } | null>(null)
+  const showEarlier = () => {
+    const first = listRef.current?.querySelector<HTMLElement>('[data-day]')
+    if (first) keepInPlace.current = { key: first.dataset.day ?? '', top: first.getBoundingClientRect().top }
+    setWin({ ...w, before: w.before + DAYS_STEP })
+  }
+  const showLater = () => setWin({ ...w, after: w.after + DAYS_STEP })
+  useLayoutEffect(() => {
+    const keep = keepInPlace.current
+    if (!keep) return
+    keepInPlace.current = null
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-day="${keep.key}"]`)
+    if (el) window.scrollBy(0, el.getBoundingClientRect().top - keep.top)
+  })
+
+  const switchView = (next: 'list' | 'table') => {
+    if (next === view) return
+    set('view', next, 'list')
+    window.scrollTo(0, 0)
+  }
   const jumpToToday = (smooth: boolean) => {
     const el = listRef.current?.querySelector<HTMLElement>('[data-anchor]')
     el?.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' })
@@ -127,8 +170,8 @@ export default function MatchesPage() {
   useEffect(() => {
     if (loading || !anchorKey || scrolledFor.current === listId) return
     scrolledFor.current = listId
-    // Nothing to skip past when the anchor is the season's first day.
-    if (anchorKey !== days[0]?.key) jumpToToday(false)
+    // Nothing to skip past when the anchor is the first day shown.
+    if (view === 'list' && anchorKey !== shown[0]?.key) jumpToToday(false)
   })
 
   if (error) return <p className="error">Couldn't load matches: {error}</p>
@@ -147,13 +190,13 @@ export default function MatchesPage() {
               <CompetitionPicker options={present} value={comp} onChange={c => set('comp', c, PREMIER_LEAGUE)} label="Competition" />
             </div>
           )}
-          <div className="rail-group">
+          {view === 'list' && <div className="rail-group">
             <button type="button" className="rail-btn" onClick={() => jumpToToday(true)} disabled={!anchorKey}>
               Jump to today
             </button>
-          </div>
+          </div>}
 
-          {teams.length > 0 && (
+          {view === 'list' && teams.length > 0 && (
             <div className="rail-group">
               <span className="rail-label">Team</span>
               <TeamFilter
@@ -168,30 +211,55 @@ export default function MatchesPage() {
 
         {/* On phones the heading sits above the controls. */}
         <div className="matches-head">
-          <h1>Matches</h1>
+          <div className="matches-title">
+            <h1>Matches</h1>
+            {compact && (
+              <div className="segmented matches-view" role="group" aria-label="Show">
+                <button type="button" aria-pressed={view === 'list'} onClick={() => switchView('list')}>
+                  Matches
+                </button>
+                <button type="button" aria-pressed={view === 'table'} onClick={() => switchView('table')}>
+                  {hasTable ? 'Table & leaders' : 'Leaders'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="matches-list">
+        {view === 'list' && <div className="matches-list">
           {loading ? (
             <p className="muted">Loading…</p>
           ) : (
             <div className="matches-days" ref={listRef}>
-              {days.map(d => (
-                <section key={d.key} className="match-day" data-anchor={d.key === anchorKey ? '' : undefined}>
+              {firstShown > 0 && (
+                <button type="button" className="rail-btn more-days" onClick={showEarlier}>Earlier results</button>
+              )}
+              {shown.map(d => (
+                <section
+                  key={d.key}
+                  className="match-day"
+                  data-day={d.key}
+                  data-anchor={d.key === anchorKey ? '' : undefined}
+                >
                   <h2 className="day-head">{dayLabel(d.key, today)}</h2>
                   <div className="m-list card">
                     {d.matches.map(m => <MatchRow key={m.id} m={m} />)}
                   </div>
                 </section>
               ))}
+              {lastShown < days.length && (
+                <button type="button" className="rail-btn more-days" onClick={showLater}>Later fixtures</button>
+              )}
               {days.length === 0 && (
                 <p className="muted">{teamId ? 'No matches for this team yet.' : 'Nothing to show here yet.'}</p>
               )}
             </div>
           )}
-        </div>
+        </div>}
 
-        <MatchesSidebar competition={comp} table={table} boards={boards} arsenalNext={arsenalNext} />
+        {(!compact || view === 'table') && (
+          <MatchesSidebar competition={comp} table={table} boards={boards} arsenalNext={arsenalNext} />
+        )}
       </div>
     </section>
   )
