@@ -109,6 +109,8 @@ public static class Endpoints
             .Include(m => m.AwayTeam)
             .Where(m => m.KickoffUtc >= fromUtc && m.KickoffUtc < toUtc)
             .OrderBy(m => m.KickoffUtc)
+            .ThenBy(m => m.HomeTeam.Name) // simultaneous kickoffs need a fixed order, or a live update reshuffles them
+            .ThenBy(m => m.Id)
             .ToListAsync(ct);
 
         var goals = await GoalsByMatchAsync(db, matches.Select(m => m.Id).ToList(), ct);
@@ -188,6 +190,8 @@ public static class Endpoints
             .Include(m => m.AwayTeam)
             .Where(m => (m.HomeTeamId == id || m.AwayTeamId == id) && m.KickoffUtc >= seasonStartUtc)
             .OrderBy(m => m.KickoffUtc)
+            .ThenBy(m => m.HomeTeam.Name) // simultaneous kickoffs need a fixed order, or a live update reshuffles them
+            .ThenBy(m => m.Id)
             .ToListAsync(ct);
 
         // The table this club is in: the Premier League if it's there, otherwise its European league phase

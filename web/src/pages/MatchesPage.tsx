@@ -116,9 +116,15 @@ export default function MatchesPage() {
     return show === 'results' ? finished : !finished
   })
 
+  // The strip above the list shows live matches, else today's. Those aren't repeated in the list below.
+  const live = visible.filter(m => isLive(m.status))
+  const todays = visible.filter(m => dayKey(m.kickoffUtc) === today)
+  const inStrip = new Set((live.length > 0 ? live : todays).map(m => m.id))
+
   // Group into Eastern days, keeping the API's kickoff order. Results read newest first.
   const days: { key: string; matches: MatchListItem[] }[] = []
   for (const m of visible) {
+    if (inStrip.has(m.id)) continue
     const key = dayKey(m.kickoffUtc)
     const last = days.at(-1)
     if (last?.key === key) last.matches.push(m)
@@ -126,8 +132,6 @@ export default function MatchesPage() {
   }
   if (show === 'results') days.reverse()
 
-  const live = visible.filter(m => isLive(m.status))
-  const todays = visible.filter(m => dayKey(m.kickoffUtc) === today)
   const next = visible.find(m => !FINISHED.has(m.status) && new Date(m.kickoffUtc) > new Date()) ?? null
   const arsenalNext = (matches ?? []).find(
     m => !FINISHED.has(m.status) && (m.home.abbreviation === 'ARS' || m.away.abbreviation === 'ARS'),
@@ -191,7 +195,7 @@ export default function MatchesPage() {
                   </div>
                 </section>
               ))}
-              {days.length === 0 && (
+              {days.length === 0 && inStrip.size === 0 && (
                 <p className="muted">{teamId ? 'No matches for this team yet.' : 'Nothing to show here yet.'}</p>
               )}
             </div>
