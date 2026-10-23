@@ -1399,7 +1399,11 @@ button.shirt:hover .shirt-label { background: rgba(9, 18, 13, 0.95); }
    navigation moves to a tab bar fixed to the bottom of the screen. Desktop never sees any of this. */
 .header-slot, .tabbar { display: none; }
 @media (max-width: 640px) {
-  .site-header { gap: 0.5rem; padding-block: 0.6rem; }
+  /* Not pinned on phones. A sticky header on iOS Chrome sometimes left the top of the page stuck
+     underneath it (seen on the matches, match and table pages, and on another site with a pinned
+     header), so it scrolls away with the page; tapping the current tab scrolls back up. */
+  .site-header { gap: 0.5rem; padding-block: 0.6rem; position: static; }
+  .match-day { scroll-margin-top: 0.75rem; }
   .site-header nav, .home-link { display: none; }
   .header-slot { display: flex; align-items: center; gap: 0.4rem; margin-left: auto; min-width: 0; }
   .header-slot:empty + .theme-toggle { margin-left: auto; }
