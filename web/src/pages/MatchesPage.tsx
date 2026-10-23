@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router'
 import { api, type MatchListItem, type Team } from '../api'
@@ -41,6 +41,8 @@ const FINISHED = new Set(['FullTime', 'Postponed', 'Cancelled'])
 
 /** Phones: bottom tabs, controls in the header, no rail or sidebar. Matches the 640px rule in index.css. */
 const PHONE = '(max-width: 640px)'
+/** Phones: past match days added per tap of "Earlier results". */
+const EARLIER_STEP = 7
 
 export default function MatchesPage() {
   const [params, setParams] = useSearchParams()
@@ -134,6 +136,31 @@ export default function MatchesPage() {
   const listRef = useRef<HTMLDivElement>(null)
   const scrolledFor = useRef('')
   const listId = `${comp}|${teamId}`
+
+  // Phones: the list starts at today, right under the header and its competition chip; past days
+  // are added on request. (The whole season above today meant scrolling back to August to reach the
+  // chip, and the header isn't pinned on phones.) Desktop always shows the whole season.
+  const [past, setPast] = useState({ id: listId, days: 0 })
+  const pastDays = past.id === listId ? past.days : 0
+  const anchorIndex = Math.max(0, days.findIndex(d => d.key === anchorKey))
+  const firstShown = phone ? Math.max(0, anchorIndex - pastDays) : 0
+  const shown = days.slice(firstShown)
+
+  // Earlier days are added above; keep the day that was on top where it was on screen
+  // (Safari has no scroll anchoring, so without this the list jumps).
+  const keepInPlace = useRef<{ key: string; top: number } | null>(null)
+  const showEarlier = () => {
+    const first = listRef.current?.querySelector<HTMLElement>('[data-day]')
+    if (first) keepInPlace.current = { key: first.dataset.day ?? '', top: first.getBoundingClientRect().top }
+    setPast({ id: listId, days: pastDays + EARLIER_STEP })
+  }
+  useLayoutEffect(() => {
+    const keep = keepInPlace.current
+    if (!keep) return
+    keepInPlace.current = null
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-day="${keep.key}"]`)
+    if (el) window.scrollBy(0, el.getBoundingClientRect().top - keep.top)
+  })
   const jumpToToday = (smooth: boolean) => {
     const el = listRef.current?.querySelector<HTMLElement>('[data-anchor]')
     el?.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' })
@@ -141,8 +168,9 @@ export default function MatchesPage() {
   useEffect(() => {
     if (loading || !anchorKey || scrolledFor.current === listId) return
     scrolledFor.current = listId
-    // Nothing to skip past when the anchor is the season's first day.
-    if (anchorKey !== days[0]?.key) jumpToToday(false)
+    // Nothing to skip past when the anchor is the first day shown (always, on a phone): start at the top.
+    if (anchorKey !== shown[0]?.key) jumpToToday(false)
+    else if (phone) window.scrollTo(0, 0)
   })
 
   if (error) return <p className="error">Couldn't load matches: {error}</p>
@@ -189,8 +217,11 @@ export default function MatchesPage() {
             <p className="muted">Loading…</p>
           ) : (
             <div className="matches-days" ref={listRef}>
-              {days.map(d => (
-                <section key={d.key} className="match-day" data-anchor={d.key === anchorKey ? '' : undefined}>
+              {firstShown > 0 && (
+                <button type="button" className="rail-btn more-days" onClick={showEarlier}>Earlier results</button>
+              )}
+              {shown.map(d => (
+                <section key={d.key} className="match-day" data-day={d.key} data-anchor={d.key === anchorKey ? '' : undefined}>
                   <h2 className="day-head">{dayLabel(d.key, today)}</h2>
                   <div className="m-list card">
                     {d.matches.map(m => <MatchRow key={m.id} m={m} />)}
