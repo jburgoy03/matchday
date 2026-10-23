@@ -9,10 +9,12 @@ import { ExternalLink } from './components/Icons'
 import { ThemeToggle } from './components/ThemeToggle'
 import { PlayerProfileProvider } from './components/PlayerProfile'
 import { BottomTabs } from './components/BottomTabs'
+import { ScrollToTop } from './components/ScrollToTop'
 
 export default function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <PlayerProfileProvider>
       <header className="site-header">
         <Link to="/" className="brand">Matchday</Link>
