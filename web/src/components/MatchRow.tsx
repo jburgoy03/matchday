@@ -34,7 +34,7 @@ export function MatchRow({ m }: { m: MatchListItem }) {
   const by = (side: Side) => m.goals.filter(g => sides.get(g) === side)
   const ht = finished && m.goals.length > 0 ? halfTimeScore(m, m.goals) : null
 
-  const status = off ? (m.status === 'Postponed' ? 'PP' : 'Off') : live ? m.clock ?? 'Live' : finished ? 'FT' : timeFmt.format(new Date(m.kickoffUtc))
+  const status = off ? (m.status === 'Postponed' ? 'PP' : 'Off') : m.status === 'HalfTime' ? 'HT' : live ? m.clock ?? 'Live' : finished ? 'FT' : timeFmt.format(new Date(m.kickoffUtc))
 
   return (
     <Link to={`/match/${m.id}`} className={`m-row ${live ? 'live' : ''}`}>
