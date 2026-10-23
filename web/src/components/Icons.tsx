@@ -29,6 +29,7 @@ function Svg({ size = 16, children }: IconProps & { children: ReactNode }) {
 export const ChevronLeft = (p: IconProps) => <Svg {...p}><path d="M15 18l-6-6 6-6" /></Svg>
 export const ChevronRight = (p: IconProps) => <Svg {...p}><path d="M9 18l6-6-6-6" /></Svg>
 export const ChevronDown = (p: IconProps) => <Svg {...p}><path d="M6 9l6 6 6-6" /></Svg>
+export const ChevronUp = (p: IconProps) => <Svg {...p}><path d="M18 15l-6-6-6 6" /></Svg>
 export const Check = (p: IconProps) => <Svg {...p}><path d="M20 6L9 17l-5-5" /></Svg>
 export const Sun = (p: IconProps) => (
   <Svg {...p}>

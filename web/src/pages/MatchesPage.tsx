@@ -5,7 +5,7 @@ import { api, type MatchListItem, type Team } from '../api'
 import { useApi } from '../useApi'
 import { useMediaQuery } from '../useMediaQuery'
 import { CompetitionSheet } from '../components/CompetitionSheet'
-import { ChevronDown } from '../components/Icons'
+import { ChevronDown, ChevronUp } from '../components/Icons'
 import { isLive } from '../format'
 import { MatchRow } from '../components/MatchRow'
 import { MatchesSidebar } from '../components/MatchesSidebar'
@@ -218,7 +218,12 @@ export default function MatchesPage() {
           ) : (
             <div className="matches-days" ref={listRef}>
               {firstShown > 0 && (
-                <button type="button" className="rail-btn more-days" onClick={showEarlier}>Earlier results</button>
+                <div className="prev-wrap">
+                  <button type="button" className="prev-scores" onClick={showEarlier}>
+                    <ChevronUp size={15} />
+                    <span>Previous scores</span>
+                  </button>
+                </div>
               )}
               {shown.map(d => (
                 <section key={d.key} className="match-day" data-day={d.key} data-anchor={d.key === anchorKey ? '' : undefined}>
