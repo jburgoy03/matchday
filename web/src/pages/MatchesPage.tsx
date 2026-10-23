@@ -1,13 +1,16 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router'
 import { api, type MatchListItem, type Team } from '../api'
 import { useApi } from '../useApi'
 import { useMediaQuery } from '../useMediaQuery'
+import { CompetitionSheet } from '../components/CompetitionSheet'
+import { ChevronDown } from '../components/Icons'
 import { isLive } from '../format'
 import { MatchRow } from '../components/MatchRow'
 import { MatchesSidebar } from '../components/MatchesSidebar'
 import { TeamFilter } from '../components/TeamFilter'
-import { COMPETITION_ORDER, CompetitionPicker, PREMIER_LEAGUE, WITH_TABLES } from '../competitions'
+import { COMPETITION_ORDER, CompetitionPicker, competitionName, competitionShort, PREMIER_LEAGUE, WITH_TABLES } from '../competitions'
 
 const ET = 'America/New_York'
 const keyFmt = new Intl.DateTimeFormat('en-CA', { timeZone: ET, year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -36,22 +39,21 @@ const seasonEnd = (today: string) => `${Number(seasonStart(today).slice(0, 4)) +
 
 const FINISHED = new Set(['FullTime', 'Postponed', 'Cancelled'])
 
-/** Below this width the sidebar can't sit beside the list (matches the 900px rule in index.css). */
-const COMPACT = '(max-width: 900px)'
-/** Match days shown around today on a compact screen, and how many each "show more" adds. */
-const DAYS_BEFORE = 3
-const DAYS_AFTER = 5
-const DAYS_STEP = 7
+/** Phones: bottom tabs, controls in the header, no rail or sidebar. Matches the 640px rule in index.css. */
+const PHONE = '(max-width: 640px)'
 
 export default function MatchesPage() {
   const [params, setParams] = useSearchParams()
   const [tick, setTick] = useState(0)
 
   const teamId = Number(params.get('team') ?? 0) || 0
-  // Phones and tablets: the sidebar becomes its own view, and the list shows a window of days
-  // around today instead of the whole season, so the controls and the table are always close by.
-  const compact = useMediaQuery(COMPACT)
-  const view = compact && params.get('view') === 'table' ? 'table' : 'list'
+
+  // Phones: the competition chip and Today button live in the header (always on screen), the
+  // competition and team pickers in a bottom sheet; the table and leaders have tabs of their own.
+  const phone = useMediaQuery(PHONE)
+  const [headerSlot, setHeaderSlot] = useState<HTMLElement | null>(null)
+  useEffect(() => setHeaderSlot(document.getElementById('header-slot')), [])
+  const [sheetOpen, setSheetOpen] = useState(false)
 
   const today = dayKey(new Date())
   // The whole season in one request, so the list covers every result and fixture.
@@ -128,52 +130,10 @@ export default function MatchesPage() {
   // Where the page opens: today, or the next day with matches (the last day once the season is over).
   const anchorKey = (days.find(d => d.key >= today) ?? days.at(-1))?.key
 
-  // Jump to the anchor day once per list (first load, competition, team or view change), not on live refreshes.
+  // Jump to the anchor day once per list (first load, competition or team change), not on live refreshes.
   const listRef = useRef<HTMLDivElement>(null)
   const scrolledFor = useRef('')
-  const listId = `${comp}|${teamId}|${view}`
-
-  // Compact screens: a window of match days around the anchor, widened on request. Resets per list.
-  const [win, setWin] = useState({ id: listId, before: DAYS_BEFORE, after: DAYS_AFTER })
-  const w = win.id === listId ? win : { id: listId, before: DAYS_BEFORE, after: DAYS_AFTER }
-  const anchorIndex = Math.max(0, days.findIndex(d => d.key === anchorKey))
-  const firstShown = compact ? Math.max(0, anchorIndex - w.before) : 0
-  const lastShown = compact ? Math.min(days.length, anchorIndex + w.after) : days.length
-  const shown = days.slice(firstShown, lastShown)
-
-  // Showing earlier days adds them above; keep the day that was on top where it was on screen
-  // (Safari has no scroll anchoring, so without this the list jumps).
-  const keepInPlace = useRef<{ key: string; top: number } | null>(null)
-  const showEarlier = () => {
-    const first = listRef.current?.querySelector<HTMLElement>('[data-day]')
-    if (first) keepInPlace.current = { key: first.dataset.day ?? '', top: first.getBoundingClientRect().top }
-    setWin({ ...w, before: w.before + DAYS_STEP })
-  }
-  const showLater = () => setWin({ ...w, after: w.after + DAYS_STEP })
-  useLayoutEffect(() => {
-    const keep = keepInPlace.current
-    if (!keep) return
-    keepInPlace.current = null
-    const el = listRef.current?.querySelector<HTMLElement>(`[data-day="${keep.key}"]`)
-    if (el) window.scrollBy(0, el.getBoundingClientRect().top - keep.top)
-  })
-
-  // The sticky bar's height, so "Jump to today" lands with the day heading clear of it.
-  const barRef = useRef<HTMLDivElement>(null)
-  useLayoutEffect(() => {
-    const el = barRef.current
-    const root = document.documentElement.style
-    if (!el) return
-    const ro = new ResizeObserver(() => root.setProperty('--matches-bar-h', `${el.offsetHeight}px`))
-    ro.observe(el)
-    return () => { ro.disconnect(); root.removeProperty('--matches-bar-h') }
-  }, [compact])
-
-  const switchView = (next: 'list' | 'table') => {
-    if (next === view) return
-    set('view', next, 'list')
-    window.scrollTo(0, 0)
-  }
+  const listId = `${comp}|${teamId}`
   const jumpToToday = (smooth: boolean) => {
     const el = listRef.current?.querySelector<HTMLElement>('[data-anchor]')
     el?.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' })
@@ -181,8 +141,8 @@ export default function MatchesPage() {
   useEffect(() => {
     if (loading || !anchorKey || scrolledFor.current === listId) return
     scrolledFor.current = listId
-    // Nothing to skip past when the anchor is the first day shown.
-    if (view === 'list' && anchorKey !== shown[0]?.key) jumpToToday(false)
+    // Nothing to skip past when the anchor is the season's first day.
+    if (anchorKey !== days[0]?.key) jumpToToday(false)
   })
 
   if (error) return <p className="error">Couldn't load matches: {error}</p>
@@ -194,20 +154,20 @@ export default function MatchesPage() {
   return (
     <section className="matches-page">
       <div className="matches-layout">
-        <div className="matches-rail">
-          {!compact && present.length > 1 && (
+        {!phone && <div className="matches-rail">
+          {present.length > 1 && (
             <div className="rail-group rail-comp">
               <span className="rail-label">Competition</span>
               <CompetitionPicker options={present} value={comp} onChange={c => set('comp', c, PREMIER_LEAGUE)} label="Competition" />
             </div>
           )}
-          {view === 'list' && <div className="rail-group">
+          <div className="rail-group">
             <button type="button" className="rail-btn" onClick={() => jumpToToday(true)} disabled={!anchorKey}>
               Jump to today
             </button>
-          </div>}
+          </div>
 
-          {view === 'list' && teams.length > 0 && (
+          {teams.length > 0 && (
             <div className="rail-group">
               <span className="rail-label">Team</span>
               <TeamFilter
@@ -218,67 +178,59 @@ export default function MatchesPage() {
               {teamId > 0 && <p className="rail-note">Showing the whole season</p>}
             </div>
           )}
+        </div>}
+
+        <div className="matches-head">
+          <h1 className={phone ? 'sr-only' : undefined}>Matches</h1>
         </div>
 
-        {/* On phones the heading sits above the controls. */}
-        {compact ? (
-          // Phones and tablets: the view switch and competition picker stay pinned under the header,
-          // so changing competition never depends on scrolling back to the top.
-          <div className="matches-head matches-bar" ref={barRef}>
-            <h1 className="sr-only">Matches</h1>
-            <div className="segmented matches-view" role="group" aria-label="Show">
-              <button type="button" aria-pressed={view === 'list'} onClick={() => switchView('list')}>
-                Matches
-              </button>
-              <button type="button" aria-pressed={view === 'table'} onClick={() => switchView('table')}>
-                {hasTable ? 'Table & leaders' : 'Leaders'}
-              </button>
-            </div>
-            {present.length > 1 && (
-              <CompetitionPicker options={present} value={comp} onChange={c => set('comp', c, PREMIER_LEAGUE)} label="Competition" />
-            )}
-          </div>
-        ) : (
-          <div className="matches-head">
-            <h1>Matches</h1>
-          </div>
-        )}
-
-        {view === 'list' && <div className="matches-list">
+        <div className="matches-list">
           {loading ? (
             <p className="muted">Loading…</p>
           ) : (
             <div className="matches-days" ref={listRef}>
-              {firstShown > 0 && (
-                <button type="button" className="rail-btn more-days" onClick={showEarlier}>Earlier results</button>
-              )}
-              {shown.map(d => (
-                <section
-                  key={d.key}
-                  className="match-day"
-                  data-day={d.key}
-                  data-anchor={d.key === anchorKey ? '' : undefined}
-                >
+              {days.map(d => (
+                <section key={d.key} className="match-day" data-anchor={d.key === anchorKey ? '' : undefined}>
                   <h2 className="day-head">{dayLabel(d.key, today)}</h2>
                   <div className="m-list card">
                     {d.matches.map(m => <MatchRow key={m.id} m={m} />)}
                   </div>
                 </section>
               ))}
-              {lastShown < days.length && (
-                <button type="button" className="rail-btn more-days" onClick={showLater}>Later fixtures</button>
-              )}
               {days.length === 0 && (
                 <p className="muted">{teamId ? 'No matches for this team yet.' : 'Nothing to show here yet.'}</p>
               )}
             </div>
           )}
-        </div>}
+        </div>
 
-        {(!compact || view === 'table') && (
-          <MatchesSidebar competition={comp} table={table} boards={boards} arsenalNext={arsenalNext} />
-        )}
+        {!phone && <MatchesSidebar competition={comp} table={table} boards={boards} arsenalNext={arsenalNext} />}
       </div>
+
+      {phone && headerSlot && createPortal(
+        <>
+          <button type="button" className="hdr-chip" aria-haspopup="dialog" onClick={() => setSheetOpen(true)}>
+            <span>{teamId && teamSeason ? `${teamSeason.team.shortName} · ${competitionShort(comp)}` : competitionName(comp)}</span>
+            <ChevronDown size={14} />
+          </button>
+          <button type="button" className="hdr-btn" onClick={() => jumpToToday(true)} disabled={!anchorKey}>
+            Today
+          </button>
+        </>,
+        headerSlot,
+      )}
+      {phone && (
+        <CompetitionSheet
+          open={sheetOpen}
+          onClose={() => setSheetOpen(false)}
+          options={present}
+          value={comp}
+          onPick={c => set('comp', c, PREMIER_LEAGUE)}
+          teams={teams}
+          teamId={teamId}
+          onTeam={id => set('team', id, 0)}
+        />
+      )}
     </section>
   )
 }

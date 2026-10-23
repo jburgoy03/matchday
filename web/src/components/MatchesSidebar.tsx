@@ -37,7 +37,14 @@ const BOARD_TABS: { key: BoardKey; label: string }[] = [
  * Scorers, assists and clean sheets in one card behind tabs — three separate cards made the
  * sticky column taller than the screen, so the bottom of it was unreachable until the page ended.
  */
-function Leaders({ boards, competition }: { boards: Leaderboards; competition: string }) {
+export function Leaders({ boards, competition, heading = true, empty }: {
+  boards: Leaderboards
+  competition: string
+  /** The card's own heading; off when the page already names it (the Leaders page). */
+  heading?: boolean
+  /** Shown instead of nothing when every board is empty. */
+  empty?: string
+}) {
   const [tab, setTab] = useState<BoardKey>('goals')
   const open = useOpenPlayer()
   const rows: Record<BoardKey, BoardRow[]> = {
@@ -45,12 +52,12 @@ function Leaders({ boards, competition }: { boards: Leaderboards; competition: s
     assists: boards.assists.map(l => ({ ...l, value: l.assists })),
     cleanSheets: boards.cleanSheets.map(l => ({ ...l, value: l.cleanSheets })),
   }
-  if (Object.values(rows).every(r => r.length === 0)) return null
+  if (Object.values(rows).every(r => r.length === 0)) return empty ? <p className="muted">{empty}</p> : null
   const shown = rows[tab]
 
   return (
     <div className="side-card card">
-      <h2>Season leaders{competition === PREMIER_LEAGUE ? '' : ` · ${competitionName(competition)}`}</h2>
+      {heading && <h2>Season leaders{competition === PREMIER_LEAGUE ? '' : ` · ${competitionName(competition)}`}</h2>}
       <div className="segmented" role="group" aria-label="Leaderboard">
         {BOARD_TABS.map(t => (
           <button key={t.key} type="button" aria-pressed={tab === t.key} onClick={() => setTab(t.key)}>

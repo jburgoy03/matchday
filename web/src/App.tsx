@@ -1,31 +1,22 @@
-import { useLayoutEffect, useRef } from 'react'
 import { BrowserRouter, Link, NavLink, Route, Routes } from 'react-router'
 import MatchesPage from './pages/MatchesPage'
 import MatchPage from './pages/MatchPage'
 import TablePage from './pages/TablePage'
 import TeamPage from './pages/TeamPage'
 import ArsenalPage from './pages/ArsenalPage'
+import LeadersPage from './pages/LeadersPage'
 import { ExternalLink } from './components/Icons'
 import { ThemeToggle } from './components/ThemeToggle'
 import { PlayerProfileProvider } from './components/PlayerProfile'
+import { BottomTabs } from './components/BottomTabs'
 
 export default function App() {
-  // The sticky header's height as --header-h, so things pinned under it (the matches bar) sit flush.
-  const headerRef = useRef<HTMLElement>(null)
-  useLayoutEffect(() => {
-    const el = headerRef.current
-    if (!el) return
-    const ro = new ResizeObserver(() =>
-      document.documentElement.style.setProperty('--header-h', `${el.offsetHeight}px`))
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
   return (
     <BrowserRouter>
       <PlayerProfileProvider>
-      <header className="site-header" ref={headerRef}>
+      <header className="site-header">
         <Link to="/" className="brand">Matchday</Link>
+        {/* Desktop navigation; phones use the bottom tab bar instead. */}
         <nav>
           <NavLink to="/" end>
             Matches
@@ -40,17 +31,21 @@ export default function App() {
           <span>deanburgoyne.dev</span>
           <ExternalLink size={14} />
         </a>
+        {/* Phones: a page can put its own controls here (the matches page's competition chip). */}
+        <div id="header-slot" className="header-slot" />
         <ThemeToggle />
       </header>
       <main>
         <Routes>
           <Route path="/" element={<MatchesPage />} />
           <Route path="/table" element={<TablePage />} />
+          <Route path="/leaders" element={<LeadersPage />} />
           <Route path="/match/:id" element={<MatchPage />} />
           <Route path="/team/:id" element={<TeamPage />} />
           <Route path="/arsenal" element={<ArsenalPage />} />
         </Routes>
       </main>
+      <BottomTabs />
       </PlayerProfileProvider>
     </BrowserRouter>
   )
