@@ -205,7 +205,7 @@ h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em; margin: 0.5r
 
 .matches-days { display: flex; flex-direction: column; gap: 1.1rem; }
 /* Jump-to-next lands with the day heading clear of the sticky site header */
-.match-day { scroll-margin-top: 4.75rem; }
+.match-day { scroll-margin-top: calc(var(--header-h, 3.5rem) + var(--matches-bar-h, 0px) + 0.75rem); }
 .day-head { margin: 0 0 0.45rem; font-size: 0.82rem; font-weight: 500; color: var(--muted); }
 .m-list { overflow: hidden; }
 .m-row {
@@ -1397,7 +1397,16 @@ button.shirt:hover .shirt-label { background: rgba(9, 18, 13, 0.95); }
 /* ---------- Matches page on phones and tablets ----------
    The list shows a window of days around today with buttons to widen it, and the sidebar is
    its own view behind a switch beside the heading, so nothing sits behind a season of matches. */
-.matches-title { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
-.matches-view { flex: 0 1 auto; }
-.matches-view button { flex: 0 0 auto; padding-inline: 0.9rem; white-space: nowrap; }
+@media (max-width: 900px) {
+  .matches-bar {
+    position: sticky; top: var(--header-h, 3.25rem); z-index: 2;
+    margin: -1rem -1.5rem 0; padding: 0.6rem 1.5rem;
+    gap: 0.55rem;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+  }
+  .matches-view button { white-space: nowrap; }
+}
+@media (max-width: 400px) {
+  .matches-bar { margin-inline: -0.75rem; padding-inline: 0.75rem; }
+}
 .more-days { justify-content: center; text-align: center; color: var(--muted); }

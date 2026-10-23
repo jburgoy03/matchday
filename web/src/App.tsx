@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react'
 import { BrowserRouter, Link, NavLink, Route, Routes } from 'react-router'
 import MatchesPage from './pages/MatchesPage'
 import MatchPage from './pages/MatchPage'
@@ -9,10 +10,21 @@ import { ThemeToggle } from './components/ThemeToggle'
 import { PlayerProfileProvider } from './components/PlayerProfile'
 
 export default function App() {
+  // The sticky header's height as --header-h, so things pinned under it (the matches bar) sit flush.
+  const headerRef = useRef<HTMLElement>(null)
+  useLayoutEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() =>
+      document.documentElement.style.setProperty('--header-h', `${el.offsetHeight}px`))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   return (
     <BrowserRouter>
       <PlayerProfileProvider>
-      <header className="site-header">
+      <header className="site-header" ref={headerRef}>
         <Link to="/" className="brand">Matchday</Link>
         <nav>
           <NavLink to="/" end>

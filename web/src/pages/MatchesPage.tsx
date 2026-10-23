@@ -158,6 +158,17 @@ export default function MatchesPage() {
     if (el) window.scrollBy(0, el.getBoundingClientRect().top - keep.top)
   })
 
+  // The sticky bar's height, so "Jump to today" lands with the day heading clear of it.
+  const barRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = barRef.current
+    const root = document.documentElement.style
+    if (!el) return
+    const ro = new ResizeObserver(() => root.setProperty('--matches-bar-h', `${el.offsetHeight}px`))
+    ro.observe(el)
+    return () => { ro.disconnect(); root.removeProperty('--matches-bar-h') }
+  }, [compact])
+
   const switchView = (next: 'list' | 'table') => {
     if (next === view) return
     set('view', next, 'list')
@@ -184,7 +195,7 @@ export default function MatchesPage() {
     <section className="matches-page">
       <div className="matches-layout">
         <div className="matches-rail">
-          {present.length > 1 && (
+          {!compact && present.length > 1 && (
             <div className="rail-group rail-comp">
               <span className="rail-label">Competition</span>
               <CompetitionPicker options={present} value={comp} onChange={c => set('comp', c, PREMIER_LEAGUE)} label="Competition" />
@@ -210,21 +221,28 @@ export default function MatchesPage() {
         </div>
 
         {/* On phones the heading sits above the controls. */}
-        <div className="matches-head">
-          <div className="matches-title">
-            <h1>Matches</h1>
-            {compact && (
-              <div className="segmented matches-view" role="group" aria-label="Show">
-                <button type="button" aria-pressed={view === 'list'} onClick={() => switchView('list')}>
-                  Matches
-                </button>
-                <button type="button" aria-pressed={view === 'table'} onClick={() => switchView('table')}>
-                  {hasTable ? 'Table & leaders' : 'Leaders'}
-                </button>
-              </div>
+        {compact ? (
+          // Phones and tablets: the view switch and competition picker stay pinned under the header,
+          // so changing competition never depends on scrolling back to the top.
+          <div className="matches-head matches-bar" ref={barRef}>
+            <h1 className="sr-only">Matches</h1>
+            <div className="segmented matches-view" role="group" aria-label="Show">
+              <button type="button" aria-pressed={view === 'list'} onClick={() => switchView('list')}>
+                Matches
+              </button>
+              <button type="button" aria-pressed={view === 'table'} onClick={() => switchView('table')}>
+                {hasTable ? 'Table & leaders' : 'Leaders'}
+              </button>
+            </div>
+            {present.length > 1 && (
+              <CompetitionPicker options={present} value={comp} onChange={c => set('comp', c, PREMIER_LEAGUE)} label="Competition" />
             )}
           </div>
-        </div>
+        ) : (
+          <div className="matches-head">
+            <h1>Matches</h1>
+          </div>
+        )}
 
         {view === 'list' && <div className="matches-list">
           {loading ? (
